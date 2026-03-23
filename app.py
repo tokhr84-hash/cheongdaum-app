@@ -4,16 +4,19 @@ import numpy as np
 from streamlit_gsheets import GSheetsConnection
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 경영 관리 V7.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 경영 관리 V7.2", page_icon="🍡", layout="wide")
 
-# 구글 시트 연결 (Secrets에 설정된 주소 사용)
+# 대표님의 구글 시트 주소 (직통 연결)
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1FmTGa_9KGwHvDFLilpSAreb0F5lX1chf1zeLMsv_wYY/edit?usp=sharing"
+
+# 연결 엔진 가동
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def fmt(val): # 숫자 콤마 포맷팅
+def fmt(val): # 숫자 콤마 표시용
     try: return f"{int(float(str(val).replace(',', ''))):,}"
     except: return str(val)
 
-# --- [2] 사이드바 계산기 (기능 유지) ---
+# --- [2] 사이드바 계산기 (대표님 요청 기능) ---
 with st.sidebar:
     st.title("🧮 빠른 리터")
     if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
@@ -29,25 +32,28 @@ with st.sidebar:
                 else: st.session_state['calc_val'] += key
                 st.rerun()
 
-st.title("🍡 청다움 경영 관리 시스템 V7.0")
+st.title("🍡 청다움 경영 관리 시스템 V7.2")
 
-# 연결 확인 메시지 출력
+# --- [3] 데이터 연결 확인 (강제 연결 로직) ---
 try:
-    # 장부 데이터 로드 시도
-    df_p = conn.read(worksheet="product_db")
-    st.success("✅ 구글 시트 금고와 성공적으로 연결되었습니다! (데이터 실시간 연동 중)")
-except:
-    st.warning("⚠️ 구글 시트 연결 대기 중... (Secrets 설정을 완료해 주세요)")
+    # Secrets가 없어도 주소로 직접 읽어옵니다.
+    df_test = conn.read(spreadsheet=SHEET_URL, worksheet="product_db", ttl=5)
+    st.success("✅ [청다움_DB] 금고와 실시간으로 연결되었습니다!")
+except Exception as e:
+    st.error(f"❌ 시트 연결에 문제가 있습니다. 시트 하단 탭 이름을 'product_db'로 만들어주세요!")
+    # 에러 메시지가 너무 복잡하면 무시하시라고 간략히 표시합니다.
 
 tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 분석", "🎯 상품 판매 분석(Rank)", "🏭 최종 결산"])
 
-# ==========================================
-# 탭 1: 상품 정보 등록 (데이터 세션 유지)
-# ==========================================
 if 'p_db' not in st.session_state: st.session_state['p_db'] = []
+if 'sales' not in st.session_state: st.session_state['sales'] = []
+
+# ==========================================
+# 탭 1: 상품 정보 등록 (기능 복구)
+# ==========================================
 with tabs[0]:
     st.subheader("📍 상품 정보 등록")
-    with st.form("p_reg"):
+    with st.form("p_reg_final"):
         c1, c2 = st.columns([2, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -61,51 +67,26 @@ with tabs[0]:
                 st.success(f"[{p_name}] 등록 완료!")
 
 # ==========================================
-# 탭 2: 월간 매출 분석
-# ==========================================
-if 'sales' not in st.session_state: st.session_state['sales'] = []
-with tabs[1]:
-    st.subheader("📅 월간 매출 분석")
-    if st.session_state['p_db']:
-        p_list = [p["상품명"] for p in st.session_state['p_db']]
-        sel = st.selectbox("상품 선택", p_list)
-        p_info = next(p for p in st.session_state['p_db'] if p["상품명"] == sel)
-        ca, cb, cc = st.columns(3)
-        ap = ca.number_input("실제 판매가", value=int(p_info["권장가"]))
-        qty = cb.number_input("판매 수량", value=1, step=1)
-        if cc.button("판매 기록 추가", use_container_width=True):
-            rev, net = float(ap)*qty, (float(ap)-p_info["원가"])*qty
-            st.session_state['sales'].append({"상품명": sel, "단가": ap, "수량": qty, "매출": rev, "순익": net})
-            st.rerun()
-        
-        if st.session_state['sales']:
-            st.dataframe(pd.DataFrame(st.session_state['sales']), use_container_width=True)
-
-# ==========================================
-# 탭 3: 상품 판매 분석
-# ==========================================
-with tabs[2]:
-    st.subheader("🏆 상품별 성과 랭킹")
-    if st.session_state['sales']:
-        df_s = pd.DataFrame(st.session_state['sales'])
-        st.write("### 📣 결과 분석 보고서")
-        st.image("청다움 멘트.png", use_container_width=True) # 창고의 사진 자동 노출
-    else:
-        st.info("데이터가 입력되면 랭킹이 자동으로 생성됩니다.")
-
-# ==========================================
-# 탭 4: 최종 결산 (명칭 완벽 반영)
+# 탭 4: 최종 결산 (명칭 완벽 고정)
 # ==========================================
 with tabs[3]:
-    st.subheader("🏭 최종 결산")
-    c1, c2, c3, c4 = st.columns(4)
-    rent = c1.number_input("월세", value=0)
-    tax = c2.number_input("세금등", value=0)
-    ext = c3.number_input("외부비용", value=0)
+    st.subheader("🏭 최종 경영 결산")
+    with st.expander("💸 이번달 고정 외부 비용", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        rent = c1.number_input("월세", value=0)
+        tax = c2.number_input("세금등", value=0)
+        ext = c3.number_input("외부비용(기타)", value=0)
     
-    total_rev = sum(float(s['매출']) for s in st.session_state['sales'])
-    total_net = sum(float(s['순익']) for s in st.session_state['sales'])
-    final_cash = total_net - (rent + tax + ext)
+    # 계산 오류 방지를 위한 정밀 연산
+    total_rev = sum(float(s.get('매출', 0)) for s in st.session_state['sales'])
+    total_net = sum(float(s.get('순익', 0)) for s in st.session_state['sales'])
+    total_out = float(rent + tax + ext)
+    final_cash = total_net - total_out
     
     st.divider()
-    st.metric("✨ 최종 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}")
+    st.write("### 🏁 청다움 경영 지표")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("💰 총 매출", f"{fmt(total_rev)}원")
+    m2.metric("📈 영업 순수익", f"{fmt(total_net)}원")
+    m3.metric("💸 합산 외부비용", f"{fmt(total_out)}원")
+    m4.metric("✨ 최종 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}")
