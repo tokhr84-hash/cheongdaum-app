@@ -8,7 +8,7 @@ from supabase import create_client, Client
 import plotly.express as px
 import requests
 
-# 💡 [핵심 조치] 클라우드 서버 시계를 한국 표준시(KST)로 영구 고정!
+# 💡 클라우드 서버 시계를 한국 표준시(KST)로 영구 고정!
 KST = timezone(timedelta(hours=9))
 
 # ==========================================
@@ -27,17 +27,16 @@ NAVER_CLIENT_SECRET = "9TFmWDXh7w"
 YOUTUBE_API_KEY = "AIzaSyD5Pn7AHtK48UagHMxNssdCXGg6BWLOSk8"
 PUBLIC_DATA_KEY = "8224e0180b695871891f9b3d0299a94d5550d9cb156a6565df3f6bcc25d84a73"
 
-# [청다움 실전 키워드 보물상자]
 KEYWORD_LIST = [
-    "디저트", "앙금플라워", "떡케이크", "양갱", "산도", "고나시", "공방", 
+    "디저트", "앙금플라워", "떡케이크", "양갱", "산도", "고나시", "디저트공방", 
     "개성주악", "선물포장방법", "보자기포장", "디저트트렌드", "화과자", 
-    "공방창업", "상견례선물", "결혼식답례", "어버이날선물", "다과", 
+    "디저트공방창업", "상견례선물", "결혼식답례", "어버이날선물", "다과", 
     "전통다과", "수제디저트", "전통디저트", "일본디저트", "대만디저트", 
-    "홍콩디저트", "해외디저트", "유행디저트"
+    "홍콩디저트", "해외디저트", "유행디저트","디저트청다움"
 ]
 
-# --- [1] 시스템 설정 및 화이트 라벨링 ---
-st.set_page_config(page_title="청다움 마스터 V52.0", page_icon="🍡", layout="wide")
+# --- [1] 시스템 설정 ---
+st.set_page_config(page_title="청다움 마스터 V53.0", page_icon="🍡", layout="wide")
 
 hide_streamlit_style = """
 <style>
@@ -45,10 +44,6 @@ hide_streamlit_style = """
 footer {visibility: hidden;}
 header {visibility: hidden;}
 [data-testid="stToolbar"] {visibility: hidden !important;}
-.viewerBadge_container__1QSob {display: none !important;}
-.viewerBadge_link__1S137 {display: none !important;}
-[data-testid="stForm"] {margin-bottom: 2rem;}
-/* 전광판 배너 디자인 */
 .marquee-banner {
     background-color: #f0f6ff;
     padding: 10px;
@@ -68,7 +63,7 @@ def fmt(val):
         return f"{int(float(str(val).replace(',', ''))):,}"
     except: return str(val)
 
-# --- [2] 수파베이스(Supabase) 엔진 가동 ---
+# --- [2] 수파베이스(Supabase) 가동 ---
 @st.cache_resource
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -99,7 +94,6 @@ def load_all_data():
     
     return u_df, p_df, s_df, e_df, q_df, l_df, m_df
 
-# 데이터 로드 및 초기 마스터 계정 확인
 try:
     df_users, df_master, df_sales, df_expenses, df_quest, df_link, df_magazine = load_all_data()
     if df_users.empty or MASTER_ID not in df_users['아이디'].values:
@@ -109,7 +103,7 @@ except Exception as e:
     st.error("장부를 불러오는 데 실패했습니다.")
     st.stop()
 
-# --- [3] 로그인 및 회원가입 로직 ---
+# --- [3] 로그인 ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
@@ -148,7 +142,7 @@ if not st.session_state.logged_in:
                     st.cache_data.clear(); st.success(f"가입 완료! '{nid_str}'로 로그인해 주세요.")
     st.stop()
 
-# --- [4] 개인별 데이터 연동 ---
+# --- [4] 개인별 데이터 세팅 ---
 current_user = st.session_state.current_user
 is_master = (current_user == MASTER_ID)
 legacy_ids = ["[청다움]", "cheongdaum"]
@@ -164,19 +158,28 @@ else:
 
 if not user_sales.empty:
     month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
-    curr_m = datetime.now(KST).strftime('%Y-%m') # KST 적용 완료
+    curr_m = datetime.now(KST).strftime('%Y-%m')
     if curr_m not in month_list: month_list.insert(0, curr_m)
 else: month_list = [datetime.now(KST).strftime('%Y-%m')]
 
 if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
-# --- [5] 사이드바 UI ---
+# --- [5] 사이드바 UI (계산기 + 달력 위젯 신설) ---
 with st.sidebar:
     st.title(f"👋 {current_user} 사장님" if not is_master else "👑 대표님(Master)")
     if st.button("로그아웃", use_container_width=True): st.session_state.logged_in = False; st.session_state.current_user = ""; st.rerun()
     st.divider()
+    
     st.subheader("⚙️ 개인 설정")
     hourly_wage = st.number_input("나의 시간당 공임(원)", value=10000, step=1000) 
+    st.divider()
+    
+    # 💡 [신규 기능] 스케줄 달력 위젯
+    st.subheader("📅 스케줄 관리")
+    selected_date = st.date_input("날짜를 선택하세요", datetime.now(KST).date())
+    if 'memo' not in st.session_state: st.session_state.memo = ""
+    st.session_state.memo = st.text_area("오늘의 메모 / 할 일", value=st.session_state.memo, height=100, placeholder="예: 앙금 10kg 발주하기")
+    
     st.divider()
     st.title("🧮 계산기")
     if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
@@ -192,7 +195,7 @@ with st.sidebar:
                 else: st.session_state['calc_val'] += key
                 st.rerun()
 
-# --- [6] 메인 화면 & 🚨 최상단 전광판 배너 ---
+# --- [6] 메인 화면 & 최상단 전광판 ---
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
 latest_news = df_magazine.iloc[0]['제목'] if not df_magazine.empty else "청다움 라운지에 새로운 디저트 트렌드가 업데이트되었습니다!"
@@ -207,17 +210,17 @@ with c2: selected_month = st.selectbox("📅 장부 조회 월(Month)", month_li
 
 monthly_sales = user_sales[user_sales['월'] == selected_month] if not user_sales.empty else pd.DataFrame()
 
-# 💡 탭 배열 
+# 탭 배열 
 tab_names = ["📊 상품 정보 등록", "📈 실전 매출 입력", "🏆 성과 시각화", "🏭 경영 결산", "🎓 청다움 라운지", "🚀 창업 퀘스트"]
 if is_master: tab_names.append("👑 마스터 관리")
 tabs = st.tabs(tab_names)
 
 # ==========================================
-# 탭 1: 상품 등록 (원가계산기 완벽 복구)
+# 탭 1: 상품 등록
 # ==========================================
 with tabs[0]:
     with st.expander("📍 신규 상품 영구 등록 (스마트 원가 계산기)", expanded=True):
-        with st.form("v52_reg_form"):
+        with st.form("v53_reg_form"):
             col1, col2, col3 = st.columns([2, 1, 1])
             p_name = col1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
             target_m = col2.number_input("🎯 목표 마진", value=0.4, step=0.1)
@@ -251,7 +254,7 @@ with tabs[0]:
                             "등록자": current_user, "상품명": p_name, "원가": cost,
                             "마진": target_m, "권장가": price, "소요시간": make_time, "공임비": labor
                         }).execute()
-                        st.cache_data.clear(); st.success(f"🎉 '{p_name}' 저장 완료! (원가: {fmt(cost)}원)"); st.rerun()
+                        st.cache_data.clear(); st.success(f"🎉 '{p_name}' 저장 완료!"); st.rerun()
                     except Exception as e: st.error("저장 오류 (상품명 중복)")
 
     st.divider()
@@ -275,7 +278,7 @@ with tabs[1]:
     if not df_p.empty:
         with st.container():
             col_a, col_b = st.columns([1, 1])
-            s_date = col_a.date_input("판매 날짜", datetime.now(KST).date()) # KST 적용
+            s_date = col_a.date_input("판매 날짜", datetime.now(KST).date())
             inb = col_b.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
             
             sel_p = st.selectbox("상품 선택", df_p["상품명"].tolist())
@@ -397,7 +400,7 @@ with tabs[3]:
     m[4].metric("✨ 통장 입금액", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지
+# 탭 5: 🎓 청다움 라운지 (도매처 클릭링크/세분화 복구)
 # ==========================================
 with tabs[4]:
     st.markdown("### 📰 청다움 트렌드 매거진")
@@ -409,22 +412,42 @@ with tabs[4]:
     else: st.info("아직 발행된 매거진이 없습니다.")
     
     st.divider()
+    # 💡 [도매처 기능 업그레이드 복구] 하이퍼링크 클릭 가능하게 렌더링
     st.markdown("### 🤝 사장님들의 비밀 창고 (도매처)")
     approved_links = df_link[df_link['상태'] == '승인']
-    if not approved_links.empty: st.dataframe(approved_links[['업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
+    if not approved_links.empty:
+        disp_links = approved_links[['업체명', '추천이유', '링크']].copy()
+        st.dataframe(
+            disp_links, 
+            column_config={"링크": st.column_config.LinkColumn("사이트 (클릭하여 이동)")}, 
+            hide_index=True, 
+            use_container_width=True
+        )
     else: st.info("승인된 도매처가 없습니다.")
         
     with st.expander("✨ 나만의 꿀 거래처 제보하기"):
         with st.form("link_form"):
-            l_name = st.text_input("업체명")
-            l_url = st.text_input("링크 (URL)")
-            l_reason = st.text_input("추천 이유")
-            if st.form_submit_button("제보하기"):
-                supabase.table("link_db").insert({"제보자": current_user, "업체명": l_name, "링크": l_url, "추천이유": l_reason, "상태": "대기"}).execute()
-                st.cache_data.clear(); st.success("제보 완료! 마스터 승인 후 노출됩니다.")
+            st.caption("사장님만 알고 있는 꿀 거래처 정보를 상세히 적어주세요!")
+            col_l1, col_l2 = st.columns(2)
+            l_name = col_l1.text_input("상호명 (필수)", placeholder="예: 새로피앤엘")
+            l_phone = col_l2.text_input("전화번호", placeholder="예: 1899-0715")
+            l_addr = st.text_input("주소", placeholder="예: 서울 중구 동호로 379")
+            l_url = st.text_input("사이트 (URL 필수)", placeholder="https://www.saeropnl.com")
+            l_reason = st.text_input("추천 이유", placeholder="방산시장에서 가장 큰 규모의 패키지 매장 중 하나로...")
+            
+            if st.form_submit_button("제보하기", use_container_width=True):
+                if l_name and l_url:
+                    # 입력받은 세부 정보를 DB 구조에 맞게 하나로 예쁘게 합칩니다.
+                    combined_name = f"{l_name} (☎ {l_phone if l_phone else '없음'} / 📍 {l_addr if l_addr else '미기재'})"
+                    supabase.table("link_db").insert({
+                        "제보자": current_user, "업체명": combined_name, "링크": l_url, "추천이유": l_reason, "상태": "대기"
+                    }).execute()
+                    st.cache_data.clear(); st.success("제보 완료! 마스터 승인 후 노출됩니다.")
+                else:
+                    st.error("상호명과 사이트(URL)는 필수 입력 사항입니다.")
 
 # ==========================================
-# 탭 6: 🚀 창업 퀘스트
+# 탭 6: 🚀 창업 퀘스트 (프로그레스 바 복구)
 # ==========================================
 with tabs[5]:
     st.markdown("### 💰 청다움 생존 계산기")
@@ -439,37 +462,59 @@ with tabs[5]:
         st.metric("✨ 3. 최종 여유 자금", f"{fmt(reserve)}원")
             
     st.divider()
+    # 💡 [핵심 복구] 8단계 진행률 프로그레스 바(막대그래프) 살려냄!
     st.markdown("### 🚀 창업 8단계 퀘스트")
     user_quest = df_quest[df_quest['등록자'] == current_user]
+    
     if user_quest.empty:
         supabase.table("quest_db").insert({"등록자": current_user}).execute()
         st.cache_data.clear(); st.rerun()
     else:
         uq = user_quest.iloc[0]
+        # 달성률 계산 로직 복원
+        quest_status = [
+            uq.get('step1', False), uq.get('step2', False), uq.get('step3', False), uq.get('step4', False),
+            uq.get('step5', False), uq.get('step6', False), uq.get('step7', False), uq.get('step8', False)
+        ]
+        progress_pct = sum(quest_status) / 8.0
+        st.progress(progress_pct)
+        st.write(f"**현재 창업 준비 {int(progress_pct * 100)}% 완료!**")
+        
         with st.form("quest_form"):
             s1 = st.checkbox("1단계: 보건증 발급", value=bool(uq.get('step1', False)))
+            st.caption("💡 노하우: 신분증 지참! 5일 소요되니 가장 먼저 움직이세요.")
             s2 = st.checkbox("2단계: 위생교육 수료", value=bool(uq.get('step2', False)))
+            st.caption("💡 노하우: 한국휴게음식업중앙회 등에서 온라인 이수 가능.")
             s3 = st.checkbox("3단계: 영업신고증 발급", value=bool(uq.get('step3', False)))
+            st.caption("💡 노하우: 확정일자 받은 계약서, 보건증, 수료증 지참 후 구청 위생과 방문.")
             s4 = st.checkbox("4단계: 사업자등록 및 통장 개설", value=bool(uq.get('step4', False)))
+            st.caption("💡 노하우: 사업자 통장과 카드를 즉시 만드세요! 가계부와 섞이면 세금 때 고생합니다.")
             s5 = st.checkbox("5단계: 필수 집기 세팅", value=bool(uq.get('step5', False)))
+            st.caption("💡 노하우: 오븐 등 전력량 확인 필수, 동선을 고려해 배치하세요.")
             s6 = st.checkbox("6단계: 부자재 확보", value=bool(uq.get('step6', False)))
+            st.caption("💡 노하우: 포장 상자, 스티커 등 배송 기간 고려하여 미리 발주하되 초도물량은 적게.")
             s7 = st.checkbox("7단계: SNS 계정 개설", value=bool(uq.get('step7', False)))
+            st.caption("💡 노하우: 매장 오픈과정을 기록하는 것도 큰 도움이 됩니다. 고객은 스토리에 지갑을 엽니다.")
             s8 = st.checkbox("8단계: 통신판매업 신고", value=bool(uq.get('step8', False)))
+            st.caption("💡 노하우: 택배 판매 시 필수! 스토어 입점 심사 기간을 고려하세요.")
+            
             if st.form_submit_button("✅ 진행 상황 저장", use_container_width=True):
-                supabase.table("quest_db").update({"step1": s1, "step2": s2, "step3": s3, "step4": s4, "step5": s5, "step6": s6, "step7": s7, "step8": s8}).eq("등록자", current_user).execute()
+                supabase.table("quest_db").update({
+                    "step1": s1, "step2": s2, "step3": s3, "step4": s4, 
+                    "step5": s5, "step6": s6, "step7": s7, "step8": s8
+                }).eq("등록자", current_user).execute()
                 st.cache_data.clear(); st.rerun()
 
     st.divider()
-    # 💡 [핵심 방어막] 공공데이터 API 인코딩 문제 및 실패 시 우회(Mock) 로직 완벽 적용!
+    # 💡 [모의 데이터 명시] 에러 방어막 및 경고 문구 추가
     st.markdown("### 🏢 전국 소상공인 지원금 실시간 레이더")
     loc_sel = st.selectbox("조회할 지역", ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"])
     if st.button(f"🔍 {loc_sel} 지역 지원금 사냥", use_container_width=True):
         if PUBLIC_DATA_KEY == "여기에_공공데이터_인증키(Encoding)를_넣으세요": 
-            st.warning("⚠️ 공공데이터 API 인증키가 필요합니다.")
+            st.warning("⚠️ 공공데이터 API 인증키가 입력되지 않았습니다.")
         else:
             with st.spinner("정부 서버에서 실시간 공고를 긁어오고 있습니다..."):
                 try:
-                    # 파이썬 특유의 이중 인코딩 문제를 방지하기 위해 키를 한 번 해독(Decode)합니다.
                     decoded_key = urllib.parse.unquote(PUBLIC_DATA_KEY)
                     url = "http://apis.data.go.kr/B552735/dgSstIdvSupportService/getDgSstIdvSupportList"
                     params = {"serviceKey": decoded_key, "type": "json", "numOfRows": 15, "pageNo": 1, "areaNm": loc_sel}
@@ -484,24 +529,19 @@ with tabs[5]:
                         else: 
                             st.info("현재 해당 지역에 진행 중인 공고가 없습니다.")
                     except:
-                        # 🚨 JSON 파싱 실패 (정부 서버 오류, 키 승인 지연 등으로 XML 반환 시 작동하는 완벽한 우회로)
-                        st.warning("⚠️ 정부 서버 통신 지연(또는 API 키 승인 대기)으로 인해, 청다움 자체 DB(모의 데이터)를 임시로 송출합니다.")
+                        # 🚨 JSON 파싱 실패 시 가짜(Mock) 데이터 표출 안내를 명확히 함
+                        st.warning("⚠️ 정부 서버 통신 오류 (또는 API 키 미승인 상태) - 화면 디자인 확인용 가짜(Mock) 데이터를 표시합니다.")
                         mock_data = [
                             {"공고명": f"[{loc_sel}] 2026년 소상공인 경영환경개선 지원사업", "등록일": datetime.now(KST).strftime("%Y-%m-%d"), "링크": "https://www.bizinfo.go.kr"},
                             {"공고명": f"[{loc_sel}] 창업기업 마케팅 지원금(최대 300만원)", "등록일": (datetime.now(KST) - timedelta(days=1)).strftime("%Y-%m-%d"), "링크": "https://www.bizinfo.go.kr"},
                             {"공고명": f"[{loc_sel}] 청년 사장님 월세 지원 및 대출 이자 보전", "등록일": (datetime.now(KST) - timedelta(days=2)).strftime("%Y-%m-%d"), "링크": "https://www.bizinfo.go.kr"}
                         ]
-                        st.dataframe(pd.DataFrame(mock_data), hide_index=True, use_container_width=True)
-                        
-                        if is_master: # 마스터만 볼 수 있는 디버깅 힌트
-                            with st.expander("🛠️ 마스터 전용 디버깅 (에러 원인)"):
-                                st.error("API 키가 아직 공공데이터포털에 동기화되지 않았거나(발급 후 1~2시간 소요), 해당 URL이 타 지역을 미지원할 수 있습니다. (아래는 정부 서버 원문입니다)")
-                                st.code(res.text[:300])
+                        st.dataframe(pd.DataFrame(mock_data), column_config={"링크": st.column_config.LinkColumn("사이트 이동")}, hide_index=True, use_container_width=True)
                 except Exception as e: 
-                    st.error(f"정부 서버와의 연결이 끊어졌습니다. (에러: {e})")
+                    st.error(f"정부 서버와의 연결이 완전히 끊어졌습니다. (에러: {e})")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 (3개 키워드 사냥 확정)
+# 탭 7: 👑 마스터 관리 (도매처 컨펌란 완벽 복구!)
 # ==========================================
 if is_master:
     with tabs[6]:
@@ -513,24 +553,19 @@ if is_master:
                 st.error("API 키를 입력해주세요!")
             else:
                 with st.spinner("로봇이 뉴스 2개, 유튜브 1개 주제를 사냥 중입니다..."):
-                    today_str = datetime.now(KST).strftime("%Y-%m-%d") # 💡 KST 적용 완료
-                    
-                    # 🎲 무작위 키워드 3개 뽑기!
+                    today_str = datetime.now(KST).strftime("%Y-%m-%d")
                     k1, k2, k3 = random.sample(KEYWORD_LIST, 3)
                     
-                    # [사냥 1] 뉴스 A
                     try:
                         n_res1 = requests.get("https://openapi.naver.com/v1/search/news.json", headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, params={"query": k1, "display": 3}).json()
                         news_txt1 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res1.get('items', [])])
                     except: news_txt1 = "- 수집 실패"
 
-                    # [사냥 2] 뉴스 B
                     try:
                         n_res2 = requests.get("https://openapi.naver.com/v1/search/news.json", headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, params={"query": k2, "display": 3}).json()
                         news_txt2 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res2.get('items', [])])
                     except: news_txt2 = "- 수집 실패"
 
-                    # [사냥 3] 유튜브 C
                     try:
                         y_res = requests.get("https://www.googleapis.com/youtube/v3/search", params={"part": "snippet", "q": k3, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}).json()
                         yt_txt = "\n".join([f"- 📺 [{i['snippet']['title'].replace('&quot;','').replace('&#39;','') }](https://www.youtube.com/watch?v={i['id']['videoId']})" for i in y_res.get('items', [])])
@@ -555,7 +590,24 @@ if is_master:
 "유행은 빠르게 변하지만, 사장님의 정성은 변하지 않습니다."
 """
                     supabase.table("magazine_db").insert({"제목": m_title, "내용": m_content.strip(), "작성일": today_str}).execute()
-                    st.cache_data.clear(); st.success("🎉 작전 성공! 전광판을 확인하세요."); st.rerun()
+                    st.cache_data.clear(); st.success("🎉 작전 성공!"); st.rerun()
+
+        st.divider()
+        # 💡 [핵심 복구] 마스터 전용 도매처 승인/반려 관리 UI
+        st.write("### 🤝 도매처 제보 승인 관리")
+        pending_links = df_link[df_link['상태'] == '대기']
+        if not pending_links.empty:
+            st.dataframe(pending_links[['id', '제보자', '업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
+            with st.form("approve_form"):
+                target_id = st.number_input("승인/반려할 ID 번호를 입력하세요", min_value=0, step=1)
+                c_btn1, c_btn2 = st.columns(2)
+                if c_btn1.form_submit_button("✅ 노출 승인 (라운지로 송출)", use_container_width=True):
+                    supabase.table("link_db").update({"상태": "승인"}).eq("id", target_id).execute()
+                    st.cache_data.clear(); st.rerun()
+                if c_btn2.form_submit_button("❌ 영구 삭제 (반려)", use_container_width=True):
+                    supabase.table("link_db").delete().eq("id", target_id).execute()
+                    st.cache_data.clear(); st.rerun()
+        else: st.info("현재 대기 중인 제보가 없습니다.")
 
         st.divider()
         st.write("### 👥 회원 명부 관리")
