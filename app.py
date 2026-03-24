@@ -4,7 +4,7 @@ import numpy as np
 from streamlit_gsheets import GSheetsConnection
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V24.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V25.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -20,7 +20,7 @@ except Exception as e:
     st.error(f"연결 대기 중입니다. {e}")
     st.stop()
 
-# --- [3] 사이드바: 직관적인 계산기 ---
+# --- [3] 사이드바: 계산기 ---
 if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
 with st.sidebar:
     st.title("🧮 계산기")
@@ -36,22 +36,19 @@ with st.sidebar:
                 else: st.session_state['calc_val'] += key
                 st.rerun()
 
-st.title("🍡 청다움 경영 관리 시스템 V24.0")
+st.title("🍡 청다움 경영 관리 시스템 V25.0")
 
 if 'sales' not in st.session_state: st.session_state['sales'] = []
+if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
-# 목표 세션 초기화 (탭 2에서 설정)
-if 'targets' not in st.session_state: 
-    st.session_state.targets = {'rev': 5000000, 'net': 2000000}
-
-tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🎯 성과 분석(Rank)", "🏭 최종 경영 결산"])
+tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산"])
 
 # ==========================================
-# 탭 1: 상품 정보 등록 및 삭제 관리
+# 탭 1: 상품 정보 등록 및 삭제
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v24_reg_form"):
+    with st.form("v25_reg_form"):
         c1, c2 = st.columns([2, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -71,8 +68,6 @@ with tabs[0]:
                 st.rerun()
 
     st.divider()
-    
-    # 삭제 기능 (구글 시트 연동)
     st.subheader("🗑️ 등록된 상품 삭제")
     if not df_p.empty and "상품명" in df_p.columns:
         del_target = st.selectbox("삭제할 상품을 선택하세요", df_p["상품명"].dropna().tolist())
@@ -91,118 +86,136 @@ with tabs[0]:
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적 (목표 설정 추가, 첨부1 반영)
+# 탭 2: 월간 매출 실적
 # ==========================================
 with tabs[1]:
-    # 목표 설정 섹션 (첨부1의 🎯 목표 설정란을 여기로 가져왔습니다)
-    with st.expander("🎯 이번 달 목표 설정", expanded=True):
+    with st.expander("🚩 이번 달 목표 설정", expanded=True):
         t1, t2 = st.columns(2)
-        # 세션 상태에 저장하여 다른 탭에서도 참조할 수 있도록 합니다.
-        st.session_state.targets['rev'] = t1.number_input("목표 총 매출액", value=st.session_state.targets['rev'], step=100000)
-        st.session_state.targets['net'] = t2.number_input("목표 영업 순수익", value=st.session_state.targets['net'], step=100000)
+        st.session_state.targets['rev'] = t1.number_input("목표 총 매출액", value=st.session_state.targets['rev'], step=1000000)
+        st.session_state.targets['net'] = t2.number_input("목표 영업 순수익", value=st.session_state.targets['net'], step=1000000)
 
-    st.subheader("📅 실제 판매 실적 입력")
+    st.subheader("📅 판매 데이터 추가")
     if not df_p.empty and "상품명" in df_p.columns:
         p_list = df_p["상품명"].dropna().tolist()
         if p_list:
-            sel = st.selectbox("판매된 상품을 선택하세요", p_list, key="sales_selectbox")
+            sel = st.selectbox("상품 선택", p_list)
             p_info = df_p[df_p["상품명"] == sel].iloc[0]
             
             ca, cb, cc = st.columns(3)
             ap = ca.number_input("실제 판매가", value=int(float(p_info["권장가"])))
             qty = cb.number_input("판매 수량", value=1, step=1)
             
-            if cc.button("실적 기록 추가", use_container_width=True):
+            if cc.button("목록에 추가", use_container_width=True):
                 rev = float(ap) * qty
                 net = (float(ap) - float(p_info["원가"])) * qty
-                st.session_state['sales'].append({"상품명": sel, "매출": rev, "순익": net, "수량": qty})
-                st.success(f"✅ {sel} 판매 기록이 추가되었습니다.")
+                st.session_state['sales'].append({"상품명": sel, "판매가": ap, "수량": qty, "총매출": rev, "순익": net})
                 st.rerun()
 
     if st.session_state['sales']:
         st.divider()
-        c1, c2 = st.columns([3, 1])
-        c1.write("### 📝 이번 달 판매 내역")
-        # 오입력 삭제 버튼
+        c1, c2 = st.columns([4, 1])
+        c1.write("### 📑 상세 판매현황")
         if c2.button("🗑️ 가장 최근 기록 1건 삭제", use_container_width=True):
             st.session_state['sales'].pop()
             st.rerun()
 
         sales_df = pd.DataFrame(st.session_state['sales'])
-        st.dataframe(sales_df.assign(매출=lambda x: x['매출'].map(fmt), 순익=lambda x: x['순익'].map(fmt)), use_container_width=True)
         
-        # 합산 표시
-        tot_rev = sales_df['매출'].sum()
+        # 데이터프레임 표시용 포맷팅
+        disp_df = sales_df.copy()
+        disp_df['수익률'] = (disp_df['순익'] / disp_df['총매출'] * 100).fillna(0).round(1).astype(str) + "%"
+        for col in ["판매가", "총매출", "순익"]:
+            disp_df[col] = disp_df[col].apply(lambda x: f"{fmt(x)}원")
+        disp_df['수량'] = disp_df['수량'].apply(lambda x: f"{x}개")
+        
+        st.dataframe(disp_df, use_container_width=True)
+        
+        # 하단 큼직한 합계 대시보드 (과거 UI 복원)
+        st.divider()
+        tot_rev = sales_df['총매출'].sum()
         tot_net = sales_df['순익'].sum()
-        st.info(f"**💰 현재까지 총 매출 합계**: {fmt(tot_rev)}원 ｜ **📈 총 영업 순익 합계**: {fmt(tot_net)}원")
+        avg_margin = round((tot_net / tot_rev * 100), 1) if tot_rev > 0 else 0
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("총 합산", f"{fmt(tot_rev)}원", f"{fmt(tot_rev - st.session_state.targets['rev'])} (목표대비)")
+        col2.metric("총 합산순 수익", f"{fmt(tot_net)}원", f"{fmt(tot_net - st.session_state.targets['net'])} (목표대비)")
+        col3.metric("평균 수익률", f"{avg_margin}%")
 
 # ==========================================
-# 탭 3: 성과 분석 (첨부2 디자인 반영, 상세 순위 표시)
+# 탭 3: 성과 분석 (4분할 독립 표 복원)
 # ==========================================
 with tabs[2]:
-    st.subheader("🏆 상품별 성과 분석 (Ranking)")
+    st.subheader("🏆 상품별 성과 및 순위 분석")
     if st.session_state['sales']:
         df_s = pd.DataFrame(st.session_state['sales'])
-        # 상품별로 합계 계산
-        rank = df_s.groupby("상품명")[["수량", "매출", "순익"]].sum().sort_values(by="순익", ascending=False).reset_index()
+        grouped = df_s.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
+        grouped["수익률"] = (grouped["순익"] / grouped["총매출"] * 100).fillna(0).round(1)
         
-        st.write("💡 **9월 한 달간 영업 순이익 기준 효자 상품 순위입니다.** (최대 상위 3개 표시)")
+        c1, c2, c3, c4 = st.columns(4)
         
-        # 첨부2의 풍부한 상세 정보 스타일로 변경
-        for i, row in rank.head(3).iterrows():
-            st.write(f"### {i+1}위 : {row['상품명']}")
-            ca, cb, cc = st.columns(3)
-            # m1 = ca.metric("💰 총 매출액", f"{fmt(row['매출'])}원", f"{fmt(row['매출'])}")
-            # m2 = cb.metric("📈 영업 순이익", f"{fmt(row['순익'])}원", f"{fmt(row['순익'])}")
-            # m3 = cc.metric("🔢 총 판매 수량", f"{row['수량']}개", f"{row['수량']}")
-            
-            # m.metric delta가 0이 나오게 fmt()에 replace를 넣어야 할 것 같네요. delta 기능을 제거하고 columns metric으로 갈게요. delta의 경우 같은 숫자값이 들어가면 delta가 지저분하게 나옵니다. delta값은 columns metric delta가 맞아요.
-            m1 = ca.metric("💰 총 매출액", f"{fmt(row['매출'])}원")
-            m2 = cb.metric("📈 영업 순이익", f"{fmt(row['순익'])}원")
-            m3 = cc.metric("🔢 총 판매 수량", f"{row['수량']}개")
-            st.divider()
-            
+        # 1. 매출 순위
+        r_rev = grouped.sort_values(by="총매출", ascending=False)[["상품명", "총매출"]].head(3).reset_index(drop=True)
+        r_rev.index = range(1, len(r_rev)+1)
+        r_rev["총매출"] = r_rev["총매출"].apply(fmt)
+        c1.markdown("📊 **주요 순위 (매출)**")
+        c1.dataframe(r_rev, use_container_width=True)
+        
+        # 2. 순수익 순위
+        r_net = grouped.sort_values(by="순익", ascending=False)[["상품명", "순익"]].head(3).reset_index(drop=True)
+        r_net.index = range(1, len(r_net)+1)
+        r_net["순익"] = r_net["순익"].apply(fmt)
+        c2.markdown("💰 **순수익 순위**")
+        c2.dataframe(r_net, use_container_width=True)
+        
+        # 3. 수익률 순위
+        r_mar = grouped.sort_values(by="수익률", ascending=False)[["상품명", "수익률"]].head(3).reset_index(drop=True)
+        r_mar.index = range(1, len(r_mar)+1)
+        r_mar["수익률"] = r_mar["수익률"].astype(str) + "%"
+        c3.markdown("📈 **수익률**")
+        c3.dataframe(r_mar, use_container_width=True)
+        
+        # 4. 판매수량 순위
+        r_qty = grouped.sort_values(by="수량", ascending=False)[["상품명", "수량"]].head(3).reset_index(drop=True)
+        r_qty.index = range(1, len(r_qty)+1)
+        c4.markdown("📦 **판매수위**")
+        c4.dataframe(r_qty, use_container_width=True)
     else:
-        st.info("매출 실적을 입력하면 랭킹이 자동으로 집계됩니다.")
+        st.info("판매 데이터를 추가하시면 순위가 표시됩니다.")
         
     st.divider()
-    st.write("### 📣 청다움 운영 가이드")
-    # GitHub에 '청다움 멘트.png' 파일이 있으면 나타납니다.
-    # 첨부 3에서 이 부분이 궁금하다고 하셨는데, 이것은 가이드 이미지를 GitHub에 업로드하시면 해결됩니다.
+    st.write("### 📣 결과 분석")
     try:
         st.image("청다움 멘트.png", use_container_width=True)
     except:
-        st.caption("※ GitHub 창고에 '청다움 멘트.png' 파일을 업로드하시면 여기에 고정 멘트가 표시됩니다. (현재 파일 없음)")
+        st.caption("※ 하단의 [이미지 업로드 가이드]를 참고하여 '청다움 멘트.png'를 업로드해 주세요.")
 
 # ==========================================
-# 탭 4: 최종 경영 결산 (목표 삭제, 목표 대비 지표 참조 작동)
+# 탭 4: 최종 경영 결산 (5단 대시보드 복원)
 # ==========================================
 with tabs[3]:
-    st.subheader("🏭 청다움 최종 경영 결산")
+    st.subheader("🏭 최종 결산")
     
-    # 탭 2에서 설정한 목표를 참조합니다. (목표 설정란은 여기서 삭제했습니다)
-    target_rev = st.session_state.targets['rev']
-    target_net = st.session_state.targets['net']
-
-    with st.expander("💸 이번 달 고정 지출 입력 (월세, 인건비 등)", expanded=True):
-        c1, c2, c3, c4 = st.columns(4)
-        rent = c1.number_input("월세", value=0)
-        tax = c2.number_input("세금/공과금", value=0)
-        labor = c3.number_input("인건비", value=0)
-        ext = c4.number_input("기타 운영비", value=0)
+    with st.expander("💸 이번 달 외부 입력", expanded=True):
+        c1, c2, c3, c4, c5 = st.columns(5)
+        rent = c1.number_input("월세", value=0, step=10000)
+        labor = c2.number_input("인건비", value=0, step=10000)
+        tax = c3.number_input("공과금", value=0, step=10000)
+        etc1 = c4.number_input("등", value=0, step=10000)
+        etc2 = c5.number_input("기타비용", value=0, step=10000)
     
-    total_rev = sum(s['매출'] for s in st.session_state['sales'])
-    total_net = sum(s['순익'] for s in st.session_state['sales'])
-    final_cash = total_net - (rent + tax + labor + ext)
+    total_expenses = rent + labor + tax + etc1 + etc2
+    st.write(f"**외부비용 합계:** {fmt(total_expenses)}원")
+    
+    total_rev = sum(s['총매출'] for s in st.session_state['sales']) if st.session_state['sales'] else 0
+    total_net = sum(s['순익'] for s in st.session_state['sales']) if st.session_state['sales'] else 0
+    final_cash = total_net - total_expenses
     
     st.divider()
-    st.write("### 🏁 청다움 종합 재무 지표 (목표 대비 달성 현황)")
-    m1, m2, m3 = st.columns(3)
+    st.write("### 🏁 최종 경영 결산 대시보드")
+    m1, m2, m3, m4, m5 = st.columns(5)
     
-    # 목표 대비 달성 현황을 화살표와 숫자로 보여줍니다. (탭 2에서 설정한 목표 참조)
-    m1.metric("💰 현재 총 매출액", f"{fmt(total_rev)}원", delta=f"목표 대비 {fmt(total_rev - target_rev)}원")
-    m2.metric("📈 영업 순이익", f"{fmt(total_net)}원", delta=f"목표 대비 {fmt(total_net - target_net)}원")
-    m3.metric("✨ 최종 찐수익 (지출 차감 후)", f"{fmt(final_cash)}원")
-    
-    if total_net >= target_net and total_net > 0:
-        st.balloons()
+    m1.metric("🎯 목표 (매출기준)", f"{fmt(st.session_state.targets['rev'])}원")
+    m2.metric("💰 매출", f"{fmt(total_rev)}원")
+    m3.metric("📈 순수익", f"{fmt(total_net)}원")
+    m4.metric("💸 외부비용", f"{fmt(total_expenses)}원")
+    m5.metric("✨ 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
