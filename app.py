@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import random
 from datetime import datetime
 from supabase import create_client, Client
 import plotly.express as px
@@ -14,16 +15,25 @@ MASTER_PW = "150328"
 
 # 1. 수파베이스(DB) 연결 키
 SUPABASE_URL = "https://imgyafnhzrketbjfpxdt.supabase.co" 
-SUPABASE_KEY = "여기에_anon_API_Key를_붙여넣으세요"         
+SUPABASE_KEY = "sb_publishable_mXPEUz8UITZRpC9Q8d11og_2D1WQAYU"         
 
-# 2. 외부 데이터 사냥용 3대 API 키
-PUBLIC_DATA_KEY = "여기에_공공데이터_일반인증키(Encoding)를_넣으세요"
-YOUTUBE_API_KEY = "여기에_유튜브_API키(AIza...)를_넣으세요"
-NAVER_CLIENT_ID = "여기에_네이버_Client_ID를_넣으세요"
-NAVER_CLIENT_SECRET = "여기에_네이버_Client_Secret을_넣으세요"
+# 2. 외부 데이터 사냥용 3대 API 키 (대표님 입력 필수!)
+NAVER_CLIENT_ID = "IfR2VKsvWWc2ZLDivsbO"
+NAVER_CLIENT_SECRET = "9TFmWDXh7w"
+YOUTUBE_API_KEY = "AIzaSyD5Pn7AHtK48UagHMxNssdCXGg6BWLOSk8"
+PUBLIC_DATA_KEY = "8224e0180b695871891f9b3d0299a94d5550d9cb156a6565df3f6bcc25d84a73"
+
+# [청다움 실전 키워드 보물상자]
+KEYWORD_LIST = [
+    "디저트", "앙금플라워", "떡케이크", "양갱", "산도", "고나시", "공방", 
+    "개성주악", "선물포장방법", "보자기포장", "디저트트렌드", "화과자", 
+    "공방 창업", "상견례선물", "결혼식답례", "어버이날선물", "다과", 
+    "전통다과", "수제디저트", "전통디저트", "일본디저트", "대만디저트", 
+    "홍콩디저트", "해외디저트", "유행디저트"
+]
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
-st.set_page_config(page_title="청다움 마스터 V41.1", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V50.0", page_icon="🍡", layout="wide")
 
 hide_streamlit_style = """
 <style>
@@ -85,6 +95,7 @@ def load_all_data():
     
     return u_df, p_df, s_df, e_df, q_df, l_df, m_df
 
+# 데이터 로드 및 초기 마스터 계정 확인
 try:
     df_users, df_master, df_sales, df_expenses, df_quest, df_link, df_magazine = load_all_data()
     if df_users.empty or MASTER_ID not in df_users['아이디'].values:
@@ -136,7 +147,7 @@ if not st.session_state.logged_in:
 # --- [4] 개인별 데이터 연동 ---
 current_user = st.session_state.current_user
 is_master = (current_user == MASTER_ID)
-legacy_ids = ["cheongdaum", "[cheongdaum]"]
+legacy_ids = ["[청다움]"]
 
 if is_master:
     df_p = df_master[(df_master['등록자'] == current_user) | (df_master['등록자'].isin(legacy_ids))]
@@ -161,7 +172,7 @@ with st.sidebar:
     if st.button("로그아웃", use_container_width=True): st.session_state.logged_in = False; st.session_state.current_user = ""; st.rerun()
     st.divider()
     st.subheader("⚙️ 개인 설정")
-    hourly_wage = st.number_input("나의 시간당 공임(원)", value=0, step=1000) 
+    hourly_wage = st.number_input("나의 시간당 공임(원)", value=10000, step=1000) 
     st.divider()
     st.title("🧮 계산기")
     if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
@@ -180,8 +191,7 @@ with st.sidebar:
 # --- [6] 메인 화면 & 🚨 최상단 전광판 배너 ---
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
-# 전광판 배너
-latest_news = df_magazine.iloc[0]['제목'] if not df_magazine.empty else "청다움 라운지에 새로운 디저트 트렌드와 꿀 거래처가 업데이트되었습니다!"
+latest_news = df_magazine.iloc[0]['제목'] if not df_magazine.empty else "청다움 라운지에 새로운 디저트 트렌드가 업데이트되었습니다!"
 st.markdown(f"""
 <div class="marquee-banner">
     <marquee scrollamount="8">📣 [오늘의 청다움 라운지] {latest_news} ➡️ 5번 탭 '청다움 라운지'에서 확인하세요!</marquee>
@@ -199,15 +209,15 @@ if is_master: tab_names.append("👑 마스터 관리")
 tabs = st.tabs(tab_names)
 
 # ==========================================
-# 탭 1: 상품 등록
+# 탭 1: 상품 등록 (원재료/부자재 완벽 분리)
 # ==========================================
 with tabs[0]:
     with st.expander("📍 신규 상품 영구 등록 (스마트 원가 계산기)", expanded=True):
-        with st.form("v41_reg_form"):
-            c1, c2, c3 = st.columns([2, 1, 1])
-            p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
-            target_m = c2.number_input("🎯 목표 마진", value=0.4, step=0.1)
-            make_time = c3.number_input("⏱️ 제작 소요시간(분)", value=30, step=5)
+        with st.form("v50_reg_form"):
+            col1, col2, col3 = st.columns([2, 1, 1])
+            p_name = col1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
+            target_m = col2.number_input("🎯 목표 마진", value=0.4, step=0.1)
+            make_time = col3.number_input("⏱️ 제작 소요시간(분)", value=30, step=5)
             
             st.write("🌿 **1. [원재료] 투입량 입력**")
             bom_recipe_init = pd.DataFrame([{"항목": "백앙금", "총용량(g,ml)": 5000, "총가격(원)": 15000, "레시피 투입량(g,ml)": 300}])
@@ -260,9 +270,9 @@ with tabs[1]:
     st.subheader("⚡ 쾌속 매출 입력 패널")
     if not df_p.empty:
         with st.container():
-            c1, c2 = st.columns([1, 1])
-            s_date = c1.date_input("판매 날짜", datetime.now())
-            inb = c2.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
+            col_a, col_b = st.columns([1, 1])
+            s_date = col_a.date_input("판매 날짜", datetime.now())
+            inb = col_b.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
             
             sel_p = st.selectbox("상품 선택", df_p["상품명"].tolist())
             p_i = df_p[df_p["상품명"] == sel_p].iloc[0]
@@ -299,20 +309,20 @@ with tabs[1]:
                 st.cache_data.clear(); st.rerun()
                 
         ds = monthly_sales.copy()
-        for col in ["판매가", "총매출", "순익"]: ds[col] = pd.to_numeric(ds[col], errors='coerce').fillna(0)
+        for c in ["판매가", "총매출", "순익"]: ds[c] = pd.to_numeric(ds[c], errors='coerce').fillna(0)
         ds['수익률'] = (ds['순익'] / ds['총매출'] * 100).fillna(0).round(1).astype(str) + "%"
-        for col in ["판매가", "총매출", "순익"]: ds[col] = ds[col].apply(lambda x: f"{fmt(x)}원")
+        for c in ["판매가", "총매출", "순익"]: ds[c] = ds[c].apply(lambda x: f"{fmt(x)}원")
         st.dataframe(ds.drop(columns=['id', '등록자', '월'], errors='ignore'), hide_index=True, use_container_width=True)
         
         tr_tab2 = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
         tn_tab2 = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum()
         st.divider()
-        col1, col2 = st.columns(2)
-        col1.metric("💰 총 매출액", f"{fmt(tr_tab2)}원", f"{fmt(tr_tab2 - st.session_state.targets['rev'])}원")
-        col2.metric("📈 영업 순이익", f"{fmt(tn_tab2)}원", f"{fmt(tn_tab2 - st.session_state.targets['net'])}원")
+        m_c1, m_c2 = st.columns(2)
+        m_c1.metric("💰 총 매출액", f"{fmt(tr_tab2)}원", f"{fmt(tr_tab2 - st.session_state.targets['rev'])}원")
+        m_c2.metric("📈 영업 순이익", f"{fmt(tn_tab2)}원", f"{fmt(tn_tab2 - st.session_state.targets['net'])}원")
 
 # ==========================================
-# 탭 3: 성과 시각화 
+# 탭 3: 성과 시각화 (50% 사이즈 조언 이미지 복구)
 # ==========================================
 with tabs[2]:
     st.subheader(f"🏆 {selected_month}월 심층 데이터 시각화")
@@ -320,31 +330,31 @@ with tabs[2]:
         an = monthly_sales.copy()
         for col in ["수량", "총매출", "순익"]: an[col] = pd.to_numeric(an[col], errors='coerce').fillna(0)
             
-        c1, c2 = st.columns(2)
+        c_chart1, c_chart2 = st.columns(2)
         path_data = an.groupby("경로")["총매출"].sum().reset_index()
         fig1 = px.pie(path_data, values='총매출', names='경로', hole=0.4, title="📍 유입 경로별 매출 비중")
         fig1.update_traces(textposition='inside', textinfo='percent+label')
-        c1.plotly_chart(fig1, use_container_width=True)
+        c_chart1.plotly_chart(fig1, use_container_width=True)
         
         prod_data = an.groupby("상품명")["총매출"].sum().reset_index().sort_values("총매출", ascending=True)
         fig2 = px.bar(prod_data, x='총매출', y='상품명', color='상품명', orientation='h', title="🏆 상품별 매출 순위", text_auto='.2s')
         fig2.update_layout(showlegend=False)
-        c2.plotly_chart(fig2, use_container_width=True)
+        c_chart2.plotly_chart(fig2, use_container_width=True)
         
         st.divider()
         g = an.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
         g["수익률"] = (g["순익"] / g["총매출"] * 100).round(1)
         
-        c = st.columns(4)
-        c[0].write("📊 **매출 Top 3**"); c[0].dataframe(g.sort_values("총매출", ascending=False).head(3)[["상품명", "총매출"]].assign(총매출=lambda x: x['총매출'].apply(fmt)), hide_index=True, use_container_width=True)
-        c[1].write("💰 **순익 Top 3**"); c[1].dataframe(g.sort_values("순익", ascending=False).head(3)[["상품명", "순익"]].assign(순익=lambda x: x['순익'].apply(fmt)), hide_index=True, use_container_width=True)
-        c[2].write("📈 **효자상품 (수익률)**"); c[2].dataframe(g.sort_values("수익률", ascending=False).head(3)[["상품명", "수익률"]].assign(수익률=lambda x: x['수익률'].astype(str) + "%"), hide_index=True, use_container_width=True)
-        c[3].write("📦 **인기상품 (수량)**"); c[3].dataframe(g.sort_values("수량", ascending=False).head(3)[["상품명", "수량"]], hide_index=True, use_container_width=True)
+        cr = st.columns(4)
+        cr[0].write("📊 **매출 Top 3**"); cr[0].dataframe(g.sort_values("총매출", ascending=False).head(3)[["상품명", "총매출"]].assign(총매출=lambda x: x['총매출'].apply(fmt)), hide_index=True, use_container_width=True)
+        cr[1].write("💰 **순익 Top 3**"); cr[1].dataframe(g.sort_values("순익", ascending=False).head(3)[["상품명", "순익"]].assign(순익=lambda x: x['순익'].apply(fmt)), hide_index=True, use_container_width=True)
+        cr[2].write("📈 **효자상품 (수익률)**"); cr[2].dataframe(g.sort_values("수익률", ascending=False).head(3)[["상품명", "수익률"]].assign(수익률=lambda x: x['수익률'].astype(str) + "%"), hide_index=True, use_container_width=True)
+        cr[3].write("📦 **인기상품 (수량)**"); cr[3].dataframe(g.sort_values("수량", ascending=False).head(3)[["상품명", "수량"]], hide_index=True, use_container_width=True)
         
     try: 
         st.divider()
         st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
-        # 💡 [UI 수정] 이미지를 화면의 50% 크기로 중앙에 배치합니다.
+        # 💡 [핵심 복구] 이미지를 화면의 50% 크기로 정중앙 배치
         c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
         with c_img2:
             st.image("청다움 멘트.png", use_container_width=True)
@@ -392,22 +402,20 @@ with tabs[3]:
     m[4].metric("✨ 통장 입금액 (찐수익)", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지
+# 탭 5: 🎓 청다움 라운지 (매거진 노출)
 # ==========================================
 with tabs[4]:
     st.markdown("### 📰 청다움 트렌드 매거진")
-    st.caption("나외치 경제팀과 치유팀이 API를 통해 매일 아침 엄선하는 디저트 인사이트입니다.")
+    st.caption("청다움 마스터가 매일 엄선하는 디저트 인사이트입니다.")
     if not df_magazine.empty:
         for idx, row in df_magazine.iterrows():
             with st.expander(f"📌 [{row['작성일']}] {row['제목']}", expanded=(idx==0)):
                 st.write(row['내용'])
     else:
-        st.info("아직 발행된 매거진이 없습니다. 마스터 탭에서 API 로봇을 가동해 주세요!")
+        st.info("아직 발행된 매거진이 없습니다. 마스터 탭에서 API 봇을 가동해 주세요!")
     
     st.divider()
-    
     st.markdown("### 🤝 사장님들의 비밀 창고 (도매처 공유)")
-    st.caption("전국 사장님들이 공유한 꿀 거래처입니다. (마스터 승인 건만 노출됩니다)")
     approved_links = df_link[df_link['상태'] == '승인']
     if not approved_links.empty:
         st.dataframe(approved_links[['업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
@@ -425,10 +433,9 @@ with tabs[4]:
                         "제보자": current_user, "업체명": l_name, "링크": l_url, "추천이유": l_reason, "상태": "대기"
                     }).execute()
                     st.cache_data.clear(); st.success("제보 완료! 마스터 승인 후 노출됩니다.")
-                else: st.warning("업체명과 링크를 입력해주세요.")
 
 # ==========================================
-# 탭 6: 🚀 창업 퀘스트
+# 탭 6: 🚀 창업 퀘스트 (8단계 풀멘트 + 공공데이터 실시간)
 # ==========================================
 with tabs[5]:
     st.markdown("### 💰 청다움 생존 계산기 (초기 예산 검증기)")
@@ -444,7 +451,6 @@ with tabs[5]:
         reserve = budget - (dep + rent + interior + misc)
         st.divider()
         st.metric("✨ 3. 최종 여유 자금 (비상금)", f"{fmt(reserve)}원")
-        
         if reserve < 0: st.error("🚨 경고: 예산이 초과되었습니다! 무리한 투자를 진행하기 전 다시 점검해 보세요!")
         elif reserve > 0 and budget > 0: st.success("✅ 안정적인 흐름입니다! 버틸 수 있는 런웨이(Runway)를 확보하셨습니다.")
             
@@ -488,19 +494,94 @@ with tabs[5]:
                     "step1": s1, "step2": s2, "step3": s3, "step4": s4, "step5": s5, "step6": s6, "step7": s7, "step8": s8
                 }).eq("등록자", current_user).execute()
                 st.cache_data.clear(); st.success("진행 상황이 저장되었습니다!"); st.rerun()
-                
+
     st.divider()
-    st.markdown("### 🏢 전국 지원금 레이더 (API 연동 대기 중)")
-    st.info("마스터가 공공데이터포털 API를 가동하면 여기에 지역별 지원금 목록이 표시됩니다.")
+    # 💡 [핵심 이식] 공공데이터 실시간 라이브 레이더
+    st.markdown("### 🏢 전국 소상공인 지원금 실시간 레이더")
+    loc_sel = st.selectbox("조회할 지역을 선택하세요", ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"])
+    if st.button(f"🔍 {loc_sel} 지역 최신 지원금 사냥하기", use_container_width=True):
+        if PUBLIC_DATA_KEY == "여기에_공공데이터_인증키(Encoding)를_넣으세요":
+            st.warning("⚠️ 앗! 마스터께서 공공데이터 API 키를 아직 장착하지 않으셨습니다.")
+        else:
+            with st.spinner("정부 서버에서 실시간으로 공고를 가져오는 중입니다..."):
+                try:
+                    url = "http://apis.data.go.kr/B552735/dgSstIdvSupportService/getDgSstIdvSupportList"
+                    params = {
+                        "serviceKey": PUBLIC_DATA_KEY,
+                        "type": "json",
+                        "numOfRows": 15,
+                        "pageNo": 1,
+                        "areaNm": loc_sel
+                    }
+                    res = requests.get(url, params=params)
+                    items = res.json().get('response', {}).get('body', {}).get('items', [])
+                    
+                    if items:
+                        st.success(f"🎉 성공! 총 {len(items)}건의 따끈따끈한 최신 공고를 발견했습니다!")
+                        st.dataframe(pd.DataFrame(items)[['title', 'registDate', 'pblancUrl']], hide_index=True, use_container_width=True)
+                    else: st.info("현재 해당 지역에 진행 중인 공고가 없습니다. 내일 다시 시도해 보세요!")
+                except Exception as e:
+                    st.error("정부 서버와의 통신이 원활하지 않거나 인증키가 올바르지 않습니다.")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 (API 통제실 + 회원관리 복구)
+# 탭 7: 👑 마스터 관리 (API 봇 버튼 이식 완벽 분리)
 # ==========================================
 if is_master:
     with tabs[6]:
         st.subheader("👑 최고 관리자 대시보드 및 API 통제실")
         
-        # 💡 [기능 복구] 회원 관리 (강퇴/정지)
+        # 💡 [핵심 이식] 랜덤 키워드 매거진 자동 발행 스위치
+        st.write("### 🤖 청다움 전용 매거진 자동 발행 로봇 (Naver & YouTube)")
+        st.caption("버튼을 누르면 대표님의 보물상자(키워드) 25개 중 2개를 무작위로 뽑아 트렌드를 사냥합니다.")
+        
+        if st.button("🚀 오늘의 트렌드 사냥 및 매거진 즉시 발행", use_container_width=True):
+            if NAVER_CLIENT_ID == "여기에_네이버_Client_ID를_넣으세요" or YOUTUBE_API_KEY == "여기에_유튜브_API키(AIza...)를_넣으세요":
+                st.error("⚠️ 상단에 네이버와 유튜브 API 키를 먼저 입력해 주셔야 로봇이 깨어납니다!")
+            else:
+                with st.spinner("로봇이 네이버 뉴스와 유튜브 영상을 맹렬히 긁어모으는 중입니다..."):
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    # 🎲 랜덤 뽑기
+                    k1, k2 = random.sample(KEYWORD_LIST, 2)
+                    
+                    # [사냥 1] 네이버 뉴스
+                    try:
+                        n_res = requests.get("https://openapi.naver.com/v1/search/news.json", 
+                                             headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, 
+                                             params={"query": k1, "display": 3}).json()
+                        news_txt = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res.get('items', [])])
+                        if not news_txt: news_txt = "- 관련 최신 뉴스가 없습니다."
+                    except: news_txt = "- 네이버 사냥에 실패했습니다."
+
+                    # [사냥 2] 유튜브 영상
+                    try:
+                        y_res = requests.get("https://www.googleapis.com/youtube/v3/search", 
+                                             params={"part": "snippet", "q": k2, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}).json()
+                        yt_txt = "\n".join([f"- 📺 [{i['snippet']['title'].replace('&quot;','').replace('&#39;','') }](https://www.youtube.com/watch?v={i['id']['videoId']})" for i in y_res.get('items', [])])
+                        if not yt_txt: yt_txt = "- 관련 추천 영상이 없습니다."
+                    except: yt_txt = "- 유튜브 사냥에 실패했습니다."
+                    
+                    # [포장 및 송출] 청다움 브랜드 노출
+                    m_title = f"🌸 {today_str} 청다움 인사이트: [{k1}] & [{k2}]"
+                    m_content = f"""
+안녕하세요, 사장님! **[청다움 라운지]**입니다. 🍡
+오늘도 치열한 하루를 준비하시는 사장님을 위해, 따뜻하고 유용한 오늘의 디저트 트렌드를 전해드립니다.
+
+### 📰 오늘의 디저트 뉴스 하이라이트 (키워드: {k1})
+{news_txt}
+
+### 🎥 영감을 주는 추천 영상 (키워드: {k2})
+{yt_txt}
+
+---
+💡 **청다움의 따뜻한 조언**
+"유행은 빠르게 변하지만, 사장님이 빚어내는 디저트의 정성은 변하지 않습니다. 오늘의 정보가 사장님의 매출에 작지만 든든한 씨앗이 되길 바랍니다."
+"""
+                    supabase.table("magazine_db").insert({
+                        "제목": m_title, "내용": m_content.strip(), "작성일": today_str
+                    }).execute()
+                    st.cache_data.clear(); st.success("🎉 작전 성공! 5번 라운지와 전광판에 매거진이 송출되었습니다!"); st.rerun()
+
+        st.divider()
         st.write("### 👥 청다움 회원 명부 관리")
         st.dataframe(df_users, hide_index=True, use_container_width=True)
         with st.form("user_manage_form"):
@@ -521,40 +602,17 @@ if is_master:
                     st.error("대표님 본인(마스터) 계정은 건드릴 수 없습니다!")
 
         st.divider()
-        st.write("### 🤖 나외치 봇(Bot) 데이터 수집실")
-        with st.expander("📡 외부 API 데이터 수동/자동 수집", expanded=True):
-            api_c1, api_c2 = st.columns(2)
-            if api_c1.button("🎥 유튜브 최신 트렌드 긁어오기 (테스트)"):
-                if YOUTUBE_API_KEY != "여기에_유튜브_API키(AIza...)를_넣으세요": st.success("유튜브 API 정상 연결!")
-                else: st.error("코드 상단에 유튜브 API 키를 먼저 입력해주세요!")
-            if api_c2.button("🏢 전국 소상공인 지원금 공고 (테스트)"):
-                if PUBLIC_DATA_KEY != "여기에_공공데이터_일반인증키(Encoding)를_넣으세요": st.success("공공데이터 API 정상 연결!")
-                else: st.error("코드 상단에 공공데이터 API 키를 입력해주세요!")
-
-        st.divider()
-        st.write("### 📰 매거진 수동 발행기 (나외치팀 전용)")
-        with st.form("magazine_form"):
-            m_title = st.text_input("매거진 제목 (전광판에 뜹니다!)")
-            m_content = st.text_area("매거진 내용 (치유풍 텍스트)")
-            if st.form_submit_button("🚀 매거진 전국 송출"):
-                if m_title and m_content:
-                    supabase.table("magazine_db").insert({
-                        "제목": m_title, "내용": m_content, "작성일": datetime.now().strftime("%Y-%m-%d")
-                    }).execute()
-                    st.cache_data.clear(); st.success("성공적으로 발행되었습니다!"); st.rerun()
-
-        st.divider()
         st.write("### 🤝 도매처 제보 승인 관리")
         pending_links = df_link[df_link['상태'] == '대기']
         if not pending_links.empty:
             st.dataframe(pending_links[['id', '제보자', '업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
             with st.form("approve_form"):
                 target_id = st.number_input("승인/반려할 ID 번호를 입력하세요", min_value=0, step=1)
-                c1, c2 = st.columns(2)
-                if c1.form_submit_button("✅ 노출 승인", use_container_width=True):
+                c_btn1, c_btn2 = st.columns(2)
+                if c_btn1.form_submit_button("✅ 노출 승인", use_container_width=True):
                     supabase.table("link_db").update({"상태": "승인"}).eq("id", target_id).execute()
                     st.cache_data.clear(); st.rerun()
-                if c2.form_submit_button("❌ 영구 삭제", use_container_width=True):
+                if c_btn2.form_submit_button("❌ 영구 삭제", use_container_width=True):
                     supabase.table("link_db").delete().eq("id", target_id).execute()
                     st.cache_data.clear(); st.rerun()
         else: st.info("현재 대기 중인 제보가 없습니다.")
