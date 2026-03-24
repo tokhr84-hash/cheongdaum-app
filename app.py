@@ -2,28 +2,27 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
+from supabase import create_client, Client
 
 # ==========================================
-# 👑 [0] 마스터(최고 관리자) 고정 설정 
+# 👑 [0] 마스터 및 데이터베이스(Supabase) 설정
 # ==========================================
 MASTER_ID = "[청다움]"
 MASTER_PW = "150328"
 
-# --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V37.0", page_icon="🍡", layout="wide")
+# 🔑 아까 복사해두신 주소와 키를 아래의 따옴표 안에 붙여넣어 주세요!
+SUPABASE_URL = "https://imgyafnhzrketbjfpxdt.supabase.co" # 👈 여기에 Project URL
+SUPABASE_KEY = "sb_publishable_mXPEUz8UITZRpC9Q8d11og_2D1WQAYU"         # 👈 여기에 빨간 동그라미 키
 
-# 🛠️ [핵심 추가] 스트림릿 기본 UI(로고, 메뉴, 앱 관리 버튼) 완벽 숨기기
+# --- [1] 시스템 설정 및 화이트 라벨링 (디자인 정리) ---
+st.set_page_config(page_title="청다움 마스터 V38.0", page_icon="🍡", layout="wide")
+
 hide_streamlit_style = """
 <style>
-/* 상단 메인 메뉴 숨기기 */
 #MainMenu {visibility: hidden;}
-/* 하단 Made with Streamlit 숨기기 */
 footer {visibility: hidden;}
-/* 상단 헤더(GitHub 아이콘, Deploy 버튼 등) 숨기기 */
 header {visibility: hidden;}
 [data-testid="stToolbar"] {visibility: hidden !important;}
-/* 우측 하단 '앱 관리(Manage app)' 뱃지 숨기기 */
 .viewerBadge_container__1QSob {display: none !important;}
 .viewerBadge_link__1S137 {display: none !important;}
 </style>
@@ -32,50 +31,44 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 def fmt(val): 
     try:
-        if pd.isna(val) or val == "": 
-            return "0"
+        if pd.isna(val) or val == "": return "0"
         return f"{int(float(str(val).replace(',', ''))):,}"
-    except: 
-        return str(val)
+    except: return str(val)
 
-# --- [2] 구글 시트 메인 서버 4대 장부 연결 ---
+# --- [2] 수파베이스(Supabase) 엔진 가동 ---
+@st.cache_resource
+def init_connection():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    
-    df_master = conn.read(ttl=15)
-    
-    try:
-        df_users = conn.read(worksheet="user_db", ttl=15)
-        if df_users.empty:
-            df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
-    except Exception:
-        df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
-        
-    try:
-        df_sales = conn.read(worksheet="sales_db", ttl=15)
-        if df_sales.empty:
-            df_sales = pd.DataFrame(columns=["등록자", "날짜", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
-    except Exception:
-        df_sales = pd.DataFrame(columns=["등록자", "날짜", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
-
-    try:
-        df_expenses = conn.read(worksheet="expense_db", ttl=15)
-        if df_expenses.empty:
-            df_expenses = pd.DataFrame(columns=["등록자", "월", "월세", "추가인건비", "공과금", "세금", "기타비용"])
-    except Exception:
-        df_expenses = pd.DataFrame(columns=["등록자", "월", "월세", "추가인건비", "공과금", "세금", "기타비용"])
-
-    if not df_users.empty:
-        df_users.fillna("", inplace=True)
-        df_users["아이디"] = df_users["아이디"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-        df_users["비밀번호"] = df_users["비밀번호"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-
-    for df_temp in [df_master, df_sales, df_expenses]:
-        if not df_temp.empty and '등록자' in df_temp.columns:
-            df_temp['등록자'] = df_temp['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-
+    supabase: Client = init_connection()
 except Exception as e:
-    st.error("🚦 현재 구글 서버 접속이 원활하지 않습니다. 잠시 후 새로고침(F5) 해주세요.")
+    st.error("데이터베이스 엔진 시동 중 오류가 발생했습니다. URL과 KEY를 다시 확인해주세요.")
+    st.stop()
+
+# 🗄️ 4대 장부 실시간 로드 (캐시 사용)
+@st.cache_data(ttl=5) # 5초마다 최신화 (구글시트보다 훨씬 빠르고 안정적입니다)
+def load_all_data():
+    u_res = supabase.table("user_db").select("*").execute()
+    p_res = supabase.table("product_db").select("*").execute()
+    s_res = supabase.table("sales_db").select("*").execute()
+    e_res = supabase.table("expense_db").select("*").execute()
+    
+    u_df = pd.DataFrame(u_res.data) if u_res.data else pd.DataFrame(columns=["아이디", "비밀번호", "상태"])
+    p_df = pd.DataFrame(p_res.data) if p_res.data else pd.DataFrame(columns=["id", "등록자", "상품명", "원가", "마진", "권장가", "소요시간", "공임비"])
+    s_df = pd.DataFrame(s_res.data) if s_res.data else pd.DataFrame(columns=["id", "등록자", "날짜", "월", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
+    e_df = pd.DataFrame(e_res.data) if e_res.data else pd.DataFrame(columns=["id", "등록자", "월", "월세", "추가인건비", "공과금", "세금", "기타비용"])
+    
+    return u_df, p_df, s_df, e_df
+
+try:
+    df_users, df_master, df_sales, df_expenses = load_all_data()
+    # 마스터 계정이 DB에 없다면 최초 1회 강제 생성
+    if df_users.empty or MASTER_ID not in df_users['아이디'].values:
+        supabase.table("user_db").insert({"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}).execute()
+        st.cache_data.clear()
+except Exception as e:
+    st.error("장부를 불러오는 데 실패했습니다. 서버 상태를 확인해주세요.")
     st.stop()
 
 # --- [3] 로그인 및 회원가입 로직 ---
@@ -134,14 +127,13 @@ if not st.session_state.logged_in:
                 elif len(nid_str) < 2:
                     st.warning("아이디를 2자 이상 입력해 주세요.")
                 else:
-                    new_user_df = pd.DataFrame([{"아이디": nid_str, "비밀번호": npw_str, "상태": "정상"}])
-                    updated_users_df = pd.concat([df_users, new_user_df], ignore_index=True)
                     try:
-                        conn.update(worksheet="user_db", data=updated_users_df)
+                        # 수파베이스에 즉각 회원 정보 꽂아넣기!
+                        supabase.table("user_db").insert({"아이디": nid_str, "비밀번호": npw_str, "상태": "정상"}).execute()
                         st.cache_data.clear()
                         st.success(f"가입 완료! 이제 '{nid_str}'로 로그인해 주세요.")
                     except Exception:
-                        st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
+                        st.error("회원가입 처리 중 오류가 발생했습니다.")
     st.stop()
 
 # --- [4] 개인별 칸막이 연동 ---
@@ -164,11 +156,9 @@ if not df_sales.empty:
         user_sales = df_sales[df_sales['등록자'] == current_user].copy()
         
     if not user_sales.empty:
-        user_sales['월'] = pd.to_datetime(user_sales['날짜']).dt.strftime('%Y-%m')
         month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
         curr_m = datetime.now().strftime('%Y-%m')
-        if curr_m not in month_list: 
-            month_list.insert(0, curr_m)
+        if curr_m not in month_list: month_list.insert(0, curr_m)
     else:
         month_list = [datetime.now().strftime('%Y-%m')]
 else:
@@ -183,8 +173,7 @@ if not df_expenses.empty:
 else:
     user_expenses = pd.DataFrame()
 
-if 'targets' not in st.session_state: 
-    st.session_state.targets = {'rev': 10000000, 'net': 4000000}
+if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
 # --- [5] 사이드바 UI ---
 with st.sidebar:
@@ -201,25 +190,17 @@ with st.sidebar:
     
     st.divider()
     st.title("🧮 계산기")
-    
-    if 'calc_val' not in st.session_state: 
-        st.session_state['calc_val'] = ""
-        
+    if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
     st.code(st.session_state['calc_val'] if st.session_state['calc_val'] else "0", language="text")
-    
     for row in [['7', '8', '9', '/'], ['4', '5', '6', '*'], ['1', '2', '3', '-'], ['C', '0', '=', '+']]:
         cols = st.columns(4)
         for i, key in enumerate(row):
             if cols[i].button(key, key=f"sidebar_calc_{key}_{row}"):
-                if key == 'C': 
-                    st.session_state['calc_val'] = ""
+                if key == 'C': st.session_state['calc_val'] = ""
                 elif key == '=':
-                    try: 
-                        st.session_state['calc_val'] = str(eval(st.session_state['calc_val']))
-                    except: 
-                        st.session_state['calc_val'] = "Error"
-                else: 
-                    st.session_state['calc_val'] += key
+                    try: st.session_state['calc_val'] = str(eval(st.session_state['calc_val']))
+                    except: st.session_state['calc_val'] = "Error"
+                else: st.session_state['calc_val'] += key
                 st.rerun()
 
 # --- [6] 메인 화면 ---
@@ -229,10 +210,7 @@ c1, c2 = st.columns([3, 1])
 with c2: 
     selected_month = st.selectbox("📅 장부 조회 월(Month)", month_list)
 
-if not user_sales.empty:
-    monthly_sales = user_sales[user_sales['월'] == selected_month] 
-else:
-    monthly_sales = pd.DataFrame()
+monthly_sales = user_sales[user_sales['월'] == selected_month] if not user_sales.empty else pd.DataFrame()
 
 if is_master:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산", "👑 총괄 마스터 관리"])
@@ -244,7 +222,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v37_reg_form"):
+    with st.form("v38_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진", value=0.4, step=0.1)
@@ -253,30 +231,22 @@ with tabs[0]:
         st.write("🌿 **[원재료등] 입력**")
         bom = st.data_editor(pd.DataFrame([{"구분": "원재료", "항목": "기본재료", "수량": 1.0, "단가": 1000}]), num_rows="dynamic")
         
-        if st.form_submit_button("💾 중앙 서버에 영구 저장"):
+        if st.form_submit_button("💾 중앙 DB에 영구 저장"):
             if p_name:
                 cost = float((bom["수량"] * bom["단가"]).sum())
                 labor = (hourly_wage / 60) * make_time
                 price = float(np.round(cost / max(0.01, (1 - target_m)), -1))
-                
-                new_p = pd.DataFrame([{
-                    "상품명": p_name, 
-                    "원가": cost, 
-                    "마진": target_m, 
-                    "권장가": price, 
-                    "소요시간": make_time, 
-                    "공임비": labor, 
-                    "등록자": current_user
-                }])
-                
-                updated_master_df = pd.concat([df_master, new_p], ignore_index=True)
                 try:
-                    conn.update(data=updated_master_df)
+                    # Supabase에 데이터 쏘기
+                    supabase.table("product_db").insert({
+                        "등록자": current_user, "상품명": p_name, "원가": cost,
+                        "마진": target_m, "권장가": price, "소요시간": make_time, "공임비": labor
+                    }).execute()
                     st.cache_data.clear()
                     st.success(f"🎉 '{p_name}' 저장 완료!")
                     st.rerun()
-                except Exception:
-                    st.error("서버 과부하로 저장이 지연되었습니다.")
+                except Exception as e:
+                    st.error(f"저장 중 오류가 발생했습니다. (상품명이 중복되었을 수 있습니다)")
 
     st.divider()
     if not df_p.empty:
@@ -284,17 +254,15 @@ with tabs[0]:
         del_p = st.selectbox("삭제할 상품", df_p["상품명"].dropna().tolist())
         
         if st.button("❌ 선택 상품 삭제", use_container_width=True):
-            condition = (df_master['등록자'].isin([current_user] + legacy_ids)) & (df_master['상품명'] == del_p)
-            updated_master_df = df_master[~condition]
-            conn.update(data=updated_master_df)
+            # 수파베이스에서 타겟 상품 삭제!
+            supabase.table("product_db").delete().eq("등록자", current_user).eq("상품명", del_p).execute()
             st.cache_data.clear()
             st.warning("상품이 삭제되었습니다.")
             st.rerun()
             
-        disp = df_p.copy().drop(columns=['등록자'], errors='ignore')
+        disp = df_p.copy().drop(columns=['id', '등록자'], errors='ignore')
         for col in ["원가", "권장가", "공임비"]:
-            if col in disp.columns: 
-                disp[col] = disp[col].apply(fmt)
+            if col in disp.columns: disp[col] = disp[col].apply(fmt)
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
@@ -322,26 +290,18 @@ with tabs[1]:
         if cc.button("영구 장부에 기록 추가", use_container_width=True):
             rev = float(ap) * qty
             net = rev - (float(p_i["원가"]) * qty) - (float(p_i.get("공임비", 0)) * qty)
+            target_m = s_date.strftime("%Y-%m")
             
-            new_s = pd.DataFrame([{
-                "등록자": current_user, 
-                "날짜": s_date.strftime("%Y-%m-%d"), 
-                "경로": inb, 
-                "상품명": sel_p, 
-                "판매가": ap, 
-                "수량": qty, 
-                "총매출": rev, 
-                "순익": net
-            }])
-            
-            updated_sales_df = pd.concat([df_sales, new_s], ignore_index=True)
             try:
-                conn.update(worksheet="sales_db", data=updated_sales_df)
+                supabase.table("sales_db").insert({
+                    "등록자": current_user, "날짜": s_date.strftime("%Y-%m-%d"), "월": target_m,
+                    "경로": inb, "상품명": sel_p, "판매가": ap, "수량": qty, "총매출": rev, "순익": net
+                }).execute()
                 st.cache_data.clear()
                 st.success("✅ 장부에 기록되었습니다!")
                 st.rerun()
             except Exception:
-                st.error("서버 오류입니다. 잠시 후 시도해주세요.")
+                st.error("오류가 발생했습니다.")
                 
     if not monthly_sales.empty:
         st.divider()
@@ -350,14 +310,15 @@ with tabs[1]:
         with st.expander("🗑️ 기록 삭제 (원하는 항목 선택 삭제)"):
             opt = {}
             for i, r in monthly_sales.iterrows():
-                opt[f"[{r['날짜']}] {r['상품명']} ({fmt(r['총매출'])}원)"] = i
+                # DB의 고유 id를 키값으로 연결합니다
+                opt[f"[{r['날짜']}] {r['상품명']} ({fmt(r['총매출'])}원)"] = r['id']
                 
             sel_del = st.selectbox("삭제 항목을 선택하세요", list(opt.keys()))
             
             if st.button("❌ 선택 기록 삭제", use_container_width=True):
-                target_idx = opt[sel_del]
-                updated_sales_df = df_sales.drop(target_idx)
-                conn.update(worksheet="sales_db", data=updated_sales_df)
+                target_id = opt[sel_del]
+                # 수파베이스의 고유 id로 삭제 (더욱 빠르고 정확함)
+                supabase.table("sales_db").delete().eq("id", int(target_id)).execute()
                 st.cache_data.clear()
                 st.warning("기록이 삭제되었습니다.")
                 st.rerun()
@@ -370,7 +331,7 @@ with tabs[1]:
         for col in ["판매가", "총매출", "순익"]:
             ds[col] = ds[col].apply(lambda x: f"{fmt(x)}원")
             
-        st.dataframe(ds.drop(columns=['등록자', '월'], errors='ignore'), use_container_width=True)
+        st.dataframe(ds.drop(columns=['id', '등록자', '월'], errors='ignore'), use_container_width=True)
         
         tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
         tn = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum()
@@ -379,6 +340,8 @@ with tabs[1]:
         col1, col2 = st.columns(2)
         col1.metric("💰 총 매출액", f"{fmt(tr)}원", f"{fmt(tr - st.session_state.targets['rev'])}원")
         col2.metric("📈 영업 순이익", f"{fmt(tn)}원", f"{fmt(tn - st.session_state.targets['net'])}원")
+    else:
+        st.info(f"선택하신 {selected_month}월의 기록이 없습니다.")
 
 # ==========================================
 # 탭 3: 성과 분석
@@ -394,30 +357,20 @@ with tabs[2]:
         st.bar_chart(an.groupby("경로")["총매출"].sum())
         
         st.divider()
-        
         g = an.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
         g["수익률"] = (g["순익"] / g["총매출"] * 100).round(1)
         
         c = st.columns(4)
-        
-        c[0].write("📊 **매출 순위**")
-        c[0].dataframe(g.sort_values("총매출", ascending=False).head(3)[["상품명", "총매출"]].assign(총매출=lambda x: x['총매출'].apply(fmt)), use_container_width=True)
-        
-        c[1].write("💰 **순익 순위**")
-        c[1].dataframe(g.sort_values("순익", ascending=False).head(3)[["상품명", "순익"]].assign(순익=lambda x: x['순익'].apply(fmt)), use_container_width=True)
-        
-        c[2].write("📈 **수익률**")
-        c[2].dataframe(g.sort_values("수익률", ascending=False).head(3)[["상품명", "수익률"]].assign(수익률=lambda x: x['수익률'].astype(str) + "%"), use_container_width=True)
-        
-        c[3].write("📦 **판매 순위**")
-        c[3].dataframe(g.sort_values("수량", ascending=False).head(3)[["상품명", "수량"]], use_container_width=True)
+        c[0].write("📊 **매출 순위**"); c[0].dataframe(g.sort_values("총매출", ascending=False).head(3)[["상품명", "총매출"]].assign(총매출=lambda x: x['총매출'].apply(fmt)), use_container_width=True)
+        c[1].write("💰 **순익 순위**"); c[1].dataframe(g.sort_values("순익", ascending=False).head(3)[["상품명", "순익"]].assign(순익=lambda x: x['순익'].apply(fmt)), use_container_width=True)
+        c[2].write("📈 **수익률**"); c[2].dataframe(g.sort_values("수익률", ascending=False).head(3)[["상품명", "수익률"]].assign(수익률=lambda x: x['수익률'].astype(str) + "%"), use_container_width=True)
+        c[3].write("📦 **판매 순위**"); c[3].dataframe(g.sort_values("수량", ascending=False).head(3)[["상품명", "수량"]], use_container_width=True)
         
     try: 
         st.divider()
         st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
         st.image("청다움 멘트.png", use_container_width=True)
-    except: 
-        pass
+    except: pass
 
 # ==========================================
 # 탭 4: 최종 경영 결산
@@ -425,42 +378,26 @@ with tabs[2]:
 with tabs[3]:
     st.subheader(f"🏭 {selected_month}월 최종 결산")
     
-    if not user_expenses.empty:
-        curr_exp = user_expenses[user_expenses['월'] == selected_month]
-    else:
-        curr_exp = pd.DataFrame()
-        
-    if not curr_exp.empty:
-        v = curr_exp.iloc[0]
-    else:
-        v = {"월세": 0, "추가인건비": 0, "공과금": 0, "세금": 0, "기타비용": 0}
+    curr_exp = user_expenses[user_expenses['월'] == selected_month] if not user_expenses.empty else pd.DataFrame()
+    v = curr_exp.iloc[0] if not curr_exp.empty else {"월세": 0, "추가인건비": 0, "공과금": 0, "세금": 0, "기타비용": 0}
         
     with st.expander(f"💸 {selected_month}월 외부 지출 입력 및 저장", expanded=True):
         with st.form("exp_form"):
             c1, c2, c3, c4, c5 = st.columns(5)
-            r = c1.number_input("월세", value=int(v['월세']), step=10000)
-            l = c2.number_input("인건비", value=int(v['추가인건비']), step=10000)
-            t = c3.number_input("공과금", value=int(v['공과금']), step=10000)
-            t2 = c4.number_input("세금", value=int(v['세금']), step=10000)
-            e = c5.number_input("기타", value=int(v['기타비용']), step=10000)
+            r = c1.number_input("월세", value=int(v.get('월세',0)), step=10000)
+            l = c2.number_input("인건비", value=int(v.get('추가인건비',0)), step=10000)
+            t = c3.number_input("공과금", value=int(v.get('공과금',0)), step=10000)
+            t2 = c4.number_input("세금", value=int(v.get('세금',0)), step=10000)
+            e = c5.number_input("기타", value=int(v.get('기타비용',0)), step=10000)
             
             if st.form_submit_button("💾 이 달의 고정 지출 영구 저장", use_container_width=True):
-                condition = (df_expenses['등록자'].isin([current_user] + legacy_ids)) & (df_expenses['월'] == selected_month)
-                ue = df_expenses[~condition]
-                
-                ne = pd.DataFrame([{
-                    "등록자": current_user, 
-                    "월": selected_month, 
-                    "월세": r, 
-                    "추가인건비": l, 
-                    "공과금": t, 
-                    "세금": t2, 
-                    "기타비용": e
-                }])
-                
-                updated_exp_df = pd.concat([ue, ne], ignore_index=True)
                 try:
-                    conn.update(worksheet="expense_db", data=updated_exp_df)
+                    # 기존 내용 삭제 후 삽입 (Upsert 로직)
+                    supabase.table("expense_db").delete().eq("등록자", current_user).eq("월", selected_month).execute()
+                    supabase.table("expense_db").insert({
+                        "등록자": current_user, "월": selected_month, 
+                        "월세": r, "추가인건비": l, "공과금": t, "세금": t2, "기타비용": e
+                    }).execute()
                     st.cache_data.clear()
                     st.success(f"✅ {selected_month}월 지출이 저장되었습니다.")
                     st.rerun()
@@ -470,13 +407,8 @@ with tabs[3]:
     total_e = r + l + t + t2 + e
     st.write(f"**외부비용 합계:** {fmt(total_e)}원")
     
-    if not monthly_sales.empty:
-        tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
-        tn = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum()
-    else:
-        tr = 0
-        tn = 0
-        
+    tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum() if not monthly_sales.empty else 0
+    tn = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum() if not monthly_sales.empty else 0
     final_cash = tn - total_e
     
     st.divider()
@@ -494,12 +426,9 @@ with tabs[3]:
 if is_master:
     with tabs[4]:
         st.subheader("👑 플랫폼 사법 관리 대시보드")
-        
         st.write("### 👥 회원 계정 관리")
         try:
-            user_list = df_users["아이디"].tolist()
-            manage_list = [u for u in user_list if u != MASTER_ID]
-            
+            manage_list = [u for u in df_users["아이디"].tolist() if u != MASTER_ID]
             if manage_list:
                 su = st.selectbox("관리할 사장님 아이디 선택", manage_list)
                 ur = df_users[df_users["아이디"] == su].iloc[0]
@@ -509,22 +438,16 @@ if is_master:
                 
                 if ur['상태'] == "정상":
                     if c2.button("🚫 계정 정지", use_container_width=True):
-                        df_users.loc[df_users["아이디"] == su, "상태"] = "정지"
-                        conn.update(worksheet="user_db", data=df_users)
-                        st.cache_data.clear()
-                        st.rerun()
+                        supabase.table("user_db").update({"상태": "정지"}).eq("아이디", su).execute()
+                        st.cache_data.clear(); st.rerun()
                 else:
                     if c2.button("✅ 정지 해제", use_container_width=True):
-                        df_users.loc[df_users["아이디"] == su, "상태"] = "정상"
-                        conn.update(worksheet="user_db", data=df_users)
-                        st.cache_data.clear()
-                        st.rerun()
+                        supabase.table("user_db").update({"상태": "정상"}).eq("아이디", su).execute()
+                        st.cache_data.clear(); st.rerun()
                         
                 if c3.button("🔥 강제 탈퇴", use_container_width=True):
-                    updated_users_df = df_users[df_users["아이디"] != su]
-                    conn.update(worksheet="user_db", data=updated_users_df)
-                    st.cache_data.clear()
-                    st.rerun()
+                    supabase.table("user_db").delete().eq("아이디", su).execute()
+                    st.cache_data.clear(); st.rerun()
             else:
                 st.info("관리할 회원이 없습니다.")
         except Exception:
@@ -532,37 +455,12 @@ if is_master:
 
         st.divider()
         st.write("### 🗄️ 전수 조사 (전체 데이터베이스)")
-        
         c = st.tabs(["📦 상품 장부", "🧾 매출 장부", "💸 지출 장부", "👥 회원 장부"])
         with c[0]:
-            if not df_master.empty:
-                disp_master = df_master.copy()
-                for col in ["원가", "권장가", "공임비"]:
-                    if col in disp_master.columns: 
-                        disp_master[col] = disp_master[col].apply(fmt)
-                st.dataframe(disp_master, use_container_width=True)
-            else:
-                st.write("데이터 없음")
-                
+            st.dataframe(df_master.drop(columns=['id'], errors='ignore'), use_container_width=True)
         with c[1]:
-            if not df_sales.empty:
-                disp_sales_all = df_sales.copy()
-                for col in ["판매가", "총매출", "순익"]:
-                    if col in disp_sales_all.columns: 
-                        disp_sales_all[col] = pd.to_numeric(disp_sales_all[col], errors='coerce').fillna(0).apply(fmt)
-                st.dataframe(disp_sales_all, use_container_width=True)
-            else:
-                st.write("데이터 없음")
-                
+            st.dataframe(df_sales.drop(columns=['id'], errors='ignore'), use_container_width=True)
         with c[2]:
-            if not df_expenses.empty:
-                disp_exp_all = df_expenses.copy()
-                for col in ["월세", "추가인건비", "공과금", "세금", "기타비용"]:
-                    if col in disp_exp_all.columns:
-                        disp_exp_all[col] = pd.to_numeric(disp_exp_all[col], errors='coerce').fillna(0).apply(fmt)
-                st.dataframe(disp_exp_all, use_container_width=True)
-            else:
-                st.write("데이터 없음")
-                
+            st.dataframe(df_expenses.drop(columns=['id'], errors='ignore'), use_container_width=True)
         with c[3]:
             st.dataframe(df_users, use_container_width=True)
