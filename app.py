@@ -4,7 +4,7 @@ import numpy as np
 from streamlit_gsheets import GSheetsConnection
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V25.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V26.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -36,7 +36,7 @@ with st.sidebar:
                 else: st.session_state['calc_val'] += key
                 st.rerun()
 
-st.title("🍡 청다움 경영 관리 시스템 V25.0")
+st.title("🍡 청다움 경영 관리 시스템 V26.0")
 
 if 'sales' not in st.session_state: st.session_state['sales'] = []
 if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
@@ -48,7 +48,7 @@ tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v25_reg_form"):
+    with st.form("v26_reg_form"):
         c1, c2 = st.columns([2, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -121,7 +121,6 @@ with tabs[1]:
 
         sales_df = pd.DataFrame(st.session_state['sales'])
         
-        # 데이터프레임 표시용 포맷팅
         disp_df = sales_df.copy()
         disp_df['수익률'] = (disp_df['순익'] / disp_df['총매출'] * 100).fillna(0).round(1).astype(str) + "%"
         for col in ["판매가", "총매출", "순익"]:
@@ -130,7 +129,6 @@ with tabs[1]:
         
         st.dataframe(disp_df, use_container_width=True)
         
-        # 하단 큼직한 합계 대시보드 (과거 UI 복원)
         st.divider()
         tot_rev = sales_df['총매출'].sum()
         tot_net = sales_df['순익'].sum()
@@ -142,7 +140,7 @@ with tabs[1]:
         col3.metric("평균 수익률", f"{avg_margin}%")
 
 # ==========================================
-# 탭 3: 성과 분석 (4분할 독립 표 복원)
+# 탭 3: 성과 분석 (오타 수정 완료)
 # ==========================================
 with tabs[2]:
     st.subheader("🏆 상품별 성과 및 순위 분석")
@@ -174,10 +172,10 @@ with tabs[2]:
         c3.markdown("📈 **수익률**")
         c3.dataframe(r_mar, use_container_width=True)
         
-        # 4. 판매수량 순위
+        # 4. 판매순위 (오타 수정 완료)
         r_qty = grouped.sort_values(by="수량", ascending=False)[["상품명", "수량"]].head(3).reset_index(drop=True)
         r_qty.index = range(1, len(r_qty)+1)
-        c4.markdown("📦 **판매수위**")
+        c4.markdown("📦 **판매순위**")
         c4.dataframe(r_qty, use_container_width=True)
     else:
         st.info("판매 데이터를 추가하시면 순위가 표시됩니다.")
@@ -190,7 +188,7 @@ with tabs[2]:
         st.caption("※ 하단의 [이미지 업로드 가이드]를 참고하여 '청다움 멘트.png'를 업로드해 주세요.")
 
 # ==========================================
-# 탭 4: 최종 경영 결산 (5단 대시보드 복원)
+# 탭 4: 최종 경영 결산 (라벨 수정 완료)
 # ==========================================
 with tabs[3]:
     st.subheader("🏭 최종 결산")
@@ -200,7 +198,7 @@ with tabs[3]:
         rent = c1.number_input("월세", value=0, step=10000)
         labor = c2.number_input("인건비", value=0, step=10000)
         tax = c3.number_input("공과금", value=0, step=10000)
-        etc1 = c4.number_input("등", value=0, step=10000)
+        etc1 = c4.number_input("세금", value=0, step=10000)  # '등'을 '세금'으로 수정 완료
         etc2 = c5.number_input("기타비용", value=0, step=10000)
     
     total_expenses = rent + labor + tax + etc1 + etc2
