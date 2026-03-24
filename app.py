@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import json
+from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V28.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V29.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -21,10 +21,10 @@ except Exception as e:
     st.error(f"연결 대기 중입니다. {e}")
     st.stop()
 
-# --- [3] 사이드바: 계산기 ---
-if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
+# --- [3] 사이드바: 계산기 및 기본 설정 ---
 with st.sidebar:
     st.title("🧮 계산기")
+    if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
     st.code(st.session_state['calc_val'] if st.session_state['calc_val'] else "0", language="text")
     for row in [['7', '8', '9', '/'], ['4', '5', '6', '*'], ['1', '2', '3', '-'], ['C', '0', '=', '+']]:
         cols = st.columns(4)
@@ -36,9 +36,13 @@ with st.sidebar:
                     except: st.session_state['calc_val'] = "Error"
                 else: st.session_state['calc_val'] += key
                 st.rerun()
-    st.caption("청다움 디지털 본사 V28.0 | 카일 본부장 보고")
+    
+    st.divider()
+    st.subheader("⚙️ 경영 설정")
+    hourly_wage = st.number_input("대표님 시간당 공임 (원)", value=15000, step=1000)
+    st.caption("※ 인건비가 포함된 진짜 순수익 계산에 사용됩니다.")
 
-st.title("🍡 청다움 경영 관리 시스템 V28.0")
+st.title("🍡 청다움 경영 관리 시스템 V29.0 (전략 에디션)")
 
 if 'sales' not in st.session_state: st.session_state['sales'] = []
 if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
@@ -46,14 +50,15 @@ if 'targets' not in st.session_state: st.session_state.targets = {'rev': 1000000
 tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산"])
 
 # ==========================================
-# 탭 1: 상품 정보 등록 및 삭제
+# 탭 1: 상품 정보 등록 (공임비 개념 추가)
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v28_reg_form"):
-        c1, c2 = st.columns([2, 1])
+    with st.form("v29_reg_form"):
+        c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
+        make_time = c3.number_input("⏱️ 제작 소요시간(분)", value=30, step=5)
         
         st.write("🌿 **[원재료등] 입력**") 
         bom = st.data_editor(pd.DataFrame([{"구분": "원재료", "항목": "기본재료", "수량": 1.0, "단가": 1000}]), num_rows="dynamic")
@@ -61,12 +66,13 @@ with tabs[0]:
         if st.form_submit_button("💾 구글 시트에 영구 저장"):
             if p_name:
                 cost = float((bom["수량"] * bom["단가"]).sum())
+                labor_cost = (hourly_wage / 60) * make_time
                 price = float(np.round(cost / max(0.01, (1-target_m)), -1))
-                new_row = pd.DataFrame([{"상품명": p_name, "원가": cost, "마진": target_m, "권장가": price}])
                 
+                new_row = pd.DataFrame([{"상품명": p_name, "원가": cost, "마진": target_m, "권장가": price, "소요시간": make_time, "공임비": labor_cost}])
                 updated_df = pd.concat([df_p, new_row], ignore_index=True)
                 conn.update(data=updated_df)
-                st.success(f"🎉 '{p_name}' 저장 완료!")
+                st.success(f"🎉 '{p_name}' 저장 완료! (공임비 {fmt(labor_cost)}원 반영)")
                 st.rerun()
 
     st.divider()
@@ -83,12 +89,12 @@ with tabs[0]:
     if not df_p.empty:
         st.write("📋 현재 영구 저장된 상품 목록")
         disp = df_p.copy()
-        for col in ["원가", "권장가"]:
+        for col in ["원가", "권장가", "공임비"]:
             if col in disp.columns: disp[col] = disp[col].apply(fmt)
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적
+# 탭 2: 월간 매출 실적 (날짜/채널 추가)
 # ==========================================
 with tabs[1]:
     with st.expander("🚩 이번 달 목표 설정", expanded=True):
@@ -100,7 +106,11 @@ with tabs[1]:
     if not df_p.empty and "상품명" in df_p.columns:
         p_list = df_p["상품명"].dropna().tolist()
         if p_list:
-            sel = st.selectbox("상품 선택", p_list)
+            c1, c2, c3 = st.columns([1, 1, 2])
+            sale_date = c1.date_input("판매 날짜", datetime.now())
+            inbound = c2.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
+            sel = c3.selectbox("상품 선택", p_list)
+            
             p_info = df_p[df_p["상품명"] == sel].iloc[0]
             
             ca, cb, cc = st.columns(3)
@@ -109,8 +119,13 @@ with tabs[1]:
             
             if cc.button("목록에 추가", use_container_width=True):
                 rev = float(ap) * qty
-                net = (float(ap) - float(p_info["원가"])) * qty
-                st.session_state['sales'].append({"상품명": sel, "판매가": ap, "수량": qty, "총매출": rev, "순익": net})
+                pure_net = rev - (float(p_info["원가"]) * qty) - (float(p_info.get("공임비", 0)) * qty)
+                st.session_state['sales'].append({
+                    "날짜": sale_date.strftime("%Y-%m-%d"), 
+                    "경로": inbound,
+                    "상품명": sel, "판매가": ap, "수량": qty, 
+                    "총매출": rev, "순익": pure_net
+                })
                 st.rerun()
 
     if st.session_state['sales']:
@@ -132,7 +147,7 @@ with tabs[1]:
         st.dataframe(disp_df, use_container_width=True)
         
         st.divider()
-        st.write("### 🏁 현재 경영 성과 합계")
+        st.write("### 🏁 현재 경영 성과 합계 (공임비 차감 후 진짜 수익)")
         tot_rev = sales_df['총매출'].sum()
         tot_net = sales_df['순익'].sum()
         avg_margin = round((tot_net / tot_rev * 100), 1) if tot_rev > 0 else 0
@@ -148,12 +163,19 @@ with tabs[1]:
         col3.metric("평균 수익률", f"{avg_margin}%")
 
 # ==========================================
-# 탭 3: 성과 분석 (멘트 이미지 확대 및 제목 변경)
+# 탭 3: 성과 분석 (4단 랭킹 + 유입경로 차트)
 # ==========================================
 with tabs[2]:
-    st.subheader("🏆 상품별 성과 및 순위 분석")
+    st.subheader("🏆 상품별 성과 및 마케팅 분석")
     if st.session_state['sales']:
         df_s = pd.DataFrame(st.session_state['sales'])
+        
+        st.markdown("##### 📍 유입 경로별 매출 현황")
+        channel_rank = df_s.groupby("경로")[["총매출"]].sum().sort_values(by="총매출", ascending=False)
+        st.bar_chart(channel_rank)
+
+        st.divider()
+        
         grouped = df_s.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
         grouped["수익률"] = (grouped["순익"] / grouped["총매출"] * 100).fillna(0).round(1)
         
@@ -182,30 +204,27 @@ with tabs[2]:
         c4.markdown("📦 **판매순위**")
         c4.dataframe(r_qty, use_container_width=True)
     else:
-        st.info("판매 데이터를 추가하시면 순위가 표시됩니다.")
+        st.info("판매 데이터를 추가하시면 순위와 마케팅 그래프가 표시됩니다.")
         
     st.divider()
-    # 청다움 멘트 이미지 스타일링 조정 (크기 확대, 제목 변경)
-    sc1, sc2, sc3 = st.columns([1, 4, 1]) # 이미지 폭 확대를 위해 컬럼 비율 조정 ([1,2,1] -> [1,4,1])
+    sc1, sc2, sc3 = st.columns([1, 4, 1])
     with sc2:
-        # 제목 변경: 약속 -> 조언
         st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
         try:
-            # width=400 제거하고 use_container_width=True 사용 (sc2 컬럼 폭 전체를 채워 확대)
             st.image("청다움 멘트.png", use_container_width=True, caption="고객과 함께하는 따뜻한 치유")
         except:
             st.caption("※ GitHub 창고에 '청다움 멘트.png' 파일을 업로드하시면 여기에 표시됩니다.")
 
 # ==========================================
-# 탭 4: 최종 경영 결산
+# 탭 4: 최종 경영 결산 (V28 로직 복원)
 # ==========================================
 with tabs[3]:
-    st.subheader("🏭 최종 결산")
+    st.subheader("🏭 최종 경영 결산")
     
     with st.expander("💸 이번 달 외부 입력 (세금 포함)", expanded=True):
         c1, c2, c3, c4, c5 = st.columns(5)
         rent = c1.number_input("월세", value=0, step=10000)
-        labor = c2.number_input("인건비", value=0, step=10000)
+        labor = c2.number_input("추가 인건비 (알바 등)", value=0, step=10000)
         tax = c3.number_input("공과금", value=0, step=10000)
         tax2 = c4.number_input("세금", value=0, step=10000)
         etc2 = c5.number_input("기타비용", value=0, step=10000)
@@ -223,13 +242,6 @@ with tabs[3]:
     
     m1.metric("🎯 목표 (매출기준)", f"{fmt(st.session_state.targets['rev'])}원")
     m2.metric("💰 매출", f"{fmt(total_rev)}원")
-    m3.metric("📈 순수익", f"{fmt(total_net)}원")
+    m3.metric("📈 순수익(대표공임 제외)", f"{fmt(total_net)}원")
     m4.metric("💸 외부비용", f"{fmt(total_expenses)}원")
-    m5.metric("✨ 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
-    
-    # 목표 달성 시 축하 풍선
-    try:
-        if diff_net >= 0 and total_net > 0:
-            st.balloons()
-    except:
-        pass
+    m5.metric("✨ 최종 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
