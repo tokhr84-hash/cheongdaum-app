@@ -224,7 +224,7 @@ with st.sidebar:
     st.divider()
     
     st.subheader("⚙️ 개인 설정")
-    hourly_wage = st.number_input("나의 시간당 공임(원)", value=10000, step=1000) 
+    hourly_wage = st.number_input("나의 시간당 공임(원)", value=0, step=1000) 
     
     st.divider()
     
