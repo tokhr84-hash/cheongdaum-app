@@ -2,10 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
-from datetime import datetime
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import plotly.express as px
 import requests
+
+# 💡 [핵심 조치] 클라우드 서버 시계를 한국 표준시(KST)로 영구 고정!
+KST = timezone(timedelta(hours=9))
 
 # ==========================================
 # 👑 [0] 마스터 및 황금 열쇠(API/DB) 설정 구역
@@ -27,13 +31,13 @@ PUBLIC_DATA_KEY = "8224e0180b695871891f9b3d0299a94d5550d9cb156a6565df3f6bcc25d84
 KEYWORD_LIST = [
     "디저트", "앙금플라워", "떡케이크", "양갱", "산도", "고나시", "공방", 
     "개성주악", "선물포장방법", "보자기포장", "디저트트렌드", "화과자", 
-    "공방 창업", "상견례선물", "결혼식답례", "어버이날선물", "다과", 
+    "공방창업", "상견례선물", "결혼식답례", "어버이날선물", "다과", 
     "전통다과", "수제디저트", "전통디저트", "일본디저트", "대만디저트", 
     "홍콩디저트", "해외디저트", "유행디저트"
 ]
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
-st.set_page_config(page_title="청다움 마스터 V50.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V52.0", page_icon="🍡", layout="wide")
 
 hide_streamlit_style = """
 <style>
@@ -147,7 +151,7 @@ if not st.session_state.logged_in:
 # --- [4] 개인별 데이터 연동 ---
 current_user = st.session_state.current_user
 is_master = (current_user == MASTER_ID)
-legacy_ids = ["[청다움]"]
+legacy_ids = ["[청다움]", "cheongdaum"]
 
 if is_master:
     df_p = df_master[(df_master['등록자'] == current_user) | (df_master['등록자'].isin(legacy_ids))]
@@ -160,9 +164,9 @@ else:
 
 if not user_sales.empty:
     month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
-    curr_m = datetime.now().strftime('%Y-%m')
+    curr_m = datetime.now(KST).strftime('%Y-%m') # KST 적용 완료
     if curr_m not in month_list: month_list.insert(0, curr_m)
-else: month_list = [datetime.now().strftime('%Y-%m')]
+else: month_list = [datetime.now(KST).strftime('%Y-%m')]
 
 if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
@@ -203,17 +207,17 @@ with c2: selected_month = st.selectbox("📅 장부 조회 월(Month)", month_li
 
 monthly_sales = user_sales[user_sales['월'] == selected_month] if not user_sales.empty else pd.DataFrame()
 
-# 💡 탭 배열 (라운지 5번, 퀘스트 6번)
+# 💡 탭 배열 
 tab_names = ["📊 상품 정보 등록", "📈 실전 매출 입력", "🏆 성과 시각화", "🏭 경영 결산", "🎓 청다움 라운지", "🚀 창업 퀘스트"]
 if is_master: tab_names.append("👑 마스터 관리")
 tabs = st.tabs(tab_names)
 
 # ==========================================
-# 탭 1: 상품 등록 (원재료/부자재 완벽 분리)
+# 탭 1: 상품 등록 (원가계산기 완벽 복구)
 # ==========================================
 with tabs[0]:
     with st.expander("📍 신규 상품 영구 등록 (스마트 원가 계산기)", expanded=True):
-        with st.form("v50_reg_form"):
+        with st.form("v52_reg_form"):
             col1, col2, col3 = st.columns([2, 1, 1])
             p_name = col1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
             target_m = col2.number_input("🎯 목표 마진", value=0.4, step=0.1)
@@ -271,7 +275,7 @@ with tabs[1]:
     if not df_p.empty:
         with st.container():
             col_a, col_b = st.columns([1, 1])
-            s_date = col_a.date_input("판매 날짜", datetime.now())
+            s_date = col_a.date_input("판매 날짜", datetime.now(KST).date()) # KST 적용
             inb = col_b.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
             
             sel_p = st.selectbox("상품 선택", df_p["상품명"].tolist())
@@ -322,7 +326,7 @@ with tabs[1]:
         m_c2.metric("📈 영업 순이익", f"{fmt(tn_tab2)}원", f"{fmt(tn_tab2 - st.session_state.targets['net'])}원")
 
 # ==========================================
-# 탭 3: 성과 시각화 (50% 사이즈 조언 이미지 복구)
+# 탭 3: 성과 시각화 
 # ==========================================
 with tabs[2]:
     st.subheader(f"🏆 {selected_month}월 심층 데이터 시각화")
@@ -333,12 +337,10 @@ with tabs[2]:
         c_chart1, c_chart2 = st.columns(2)
         path_data = an.groupby("경로")["총매출"].sum().reset_index()
         fig1 = px.pie(path_data, values='총매출', names='경로', hole=0.4, title="📍 유입 경로별 매출 비중")
-        fig1.update_traces(textposition='inside', textinfo='percent+label')
         c_chart1.plotly_chart(fig1, use_container_width=True)
         
         prod_data = an.groupby("상품명")["총매출"].sum().reset_index().sort_values("총매출", ascending=True)
         fig2 = px.bar(prod_data, x='총매출', y='상품명', color='상품명', orientation='h', title="🏆 상품별 매출 순위", text_auto='.2s')
-        fig2.update_layout(showlegend=False)
         c_chart2.plotly_chart(fig2, use_container_width=True)
         
         st.divider()
@@ -354,10 +356,8 @@ with tabs[2]:
     try: 
         st.divider()
         st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
-        # 💡 [핵심 복구] 이미지를 화면의 50% 크기로 정중앙 배치
         c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
-        with c_img2:
-            st.image("청다움 멘트.png", use_container_width=True)
+        with c_img2: st.image("청다움 멘트.png", use_container_width=True)
     except: pass
 
 # ==========================================
@@ -378,14 +378,9 @@ with tabs[3]:
             e = c5.number_input("기타", value=int(v.get('기타비용',0)), step=10000)
             
             if st.form_submit_button("💾 지출 내역 확정", use_container_width=True):
-                try:
-                    supabase.table("expense_db").delete().eq("등록자", current_user).eq("월", selected_month).execute()
-                    supabase.table("expense_db").insert({
-                        "등록자": current_user, "월": selected_month, 
-                        "월세": r, "추가인건비": l, "공과금": t, "세금": t2, "기타비용": e
-                    }).execute()
-                    st.cache_data.clear(); st.rerun()
-                except Exception: st.error("서버 지연 중입니다.")
+                supabase.table("expense_db").delete().eq("등록자", current_user).eq("월", selected_month).execute()
+                supabase.table("expense_db").insert({"등록자": current_user, "월": selected_month, "월세": r, "추가인건비": l, "공과금": t, "세금": t2, "기타비용": e}).execute()
+                st.cache_data.clear(); st.rerun()
                     
     total_e = r + l + t + t2 + e
     tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum() if not monthly_sales.empty else 0
@@ -397,12 +392,12 @@ with tabs[3]:
     m = st.columns(5)
     m[0].metric("🎯 목표 (매출)", f"{fmt(st.session_state.targets['rev'])}원")
     m[1].metric("💰 총 매출액", f"{fmt(tr)}원")
-    m[2].metric("📈 영업 순익 (공임 제외)", f"{fmt(tn)}원")
-    m[3].metric("💸 외부 지출액", f"{fmt(total_e)}원")
-    m[4].metric("✨ 통장 입금액 (찐수익)", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
+    m[2].metric("📈 영업 순익", f"{fmt(tn)}원")
+    m[3].metric("💸 지출액", f"{fmt(total_e)}원")
+    m[4].metric("✨ 통장 입금액", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지 (매거진 노출)
+# 탭 5: 🎓 청다움 라운지
 # ==========================================
 with tabs[4]:
     st.markdown("### 📰 청다움 트렌드 매거진")
@@ -411,208 +406,163 @@ with tabs[4]:
         for idx, row in df_magazine.iterrows():
             with st.expander(f"📌 [{row['작성일']}] {row['제목']}", expanded=(idx==0)):
                 st.write(row['내용'])
-    else:
-        st.info("아직 발행된 매거진이 없습니다. 마스터 탭에서 API 봇을 가동해 주세요!")
+    else: st.info("아직 발행된 매거진이 없습니다.")
     
     st.divider()
-    st.markdown("### 🤝 사장님들의 비밀 창고 (도매처 공유)")
+    st.markdown("### 🤝 사장님들의 비밀 창고 (도매처)")
     approved_links = df_link[df_link['상태'] == '승인']
-    if not approved_links.empty:
-        st.dataframe(approved_links[['업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
-    else:
-        st.info("아직 승인된 도매처가 없습니다. 첫 번째 꿀통을 공유해 보세요!")
+    if not approved_links.empty: st.dataframe(approved_links[['업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
+    else: st.info("승인된 도매처가 없습니다.")
         
     with st.expander("✨ 나만의 꿀 거래처 제보하기"):
         with st.form("link_form"):
-            l_name = st.text_input("업체명 (예: 방산시장 OO패키지)")
+            l_name = st.text_input("업체명")
             l_url = st.text_input("링크 (URL)")
             l_reason = st.text_input("추천 이유")
             if st.form_submit_button("제보하기"):
-                if l_name and l_url:
-                    supabase.table("link_db").insert({
-                        "제보자": current_user, "업체명": l_name, "링크": l_url, "추천이유": l_reason, "상태": "대기"
-                    }).execute()
-                    st.cache_data.clear(); st.success("제보 완료! 마스터 승인 후 노출됩니다.")
+                supabase.table("link_db").insert({"제보자": current_user, "업체명": l_name, "링크": l_url, "추천이유": l_reason, "상태": "대기"}).execute()
+                st.cache_data.clear(); st.success("제보 완료! 마스터 승인 후 노출됩니다.")
 
 # ==========================================
-# 탭 6: 🚀 창업 퀘스트 (8단계 풀멘트 + 공공데이터 실시간)
+# 탭 6: 🚀 창업 퀘스트
 # ==========================================
 with tabs[5]:
-    st.markdown("### 💰 청다움 생존 계산기 (초기 예산 검증기)")
+    st.markdown("### 💰 청다움 생존 계산기")
     with st.container(border=True):
-        budget = st.number_input("💵 1. 초기 예산 (가용 자금 총액)", value=0, step=1000000)
-        st.caption("💸 **2. 방어벽 세팅 (지출 예상)**")
+        budget = st.number_input("💵 1. 초기 예산", value=0, step=1000000)
         col_c1, col_c2, col_c3, col_c4 = st.columns(4)
         dep = col_c1.number_input("보증금", value=0, step=1000000)
-        rent = col_c2.number_input("월세 (안전빵 3~6개월치)", value=0, step=100000)
-        interior = col_c3.number_input("인테리어 예상 비용", value=0, step=1000000)
-        misc = col_c4.number_input("집기, 재료 및 기타", value=0, step=1000000)
-        
+        rent = col_c2.number_input("월세(6개월치)", value=0, step=100000)
+        interior = col_c3.number_input("인테리어 비용", value=0, step=1000000)
+        misc = col_c4.number_input("집기/기타", value=0, step=1000000)
         reserve = budget - (dep + rent + interior + misc)
-        st.divider()
-        st.metric("✨ 3. 최종 여유 자금 (비상금)", f"{fmt(reserve)}원")
-        if reserve < 0: st.error("🚨 경고: 예산이 초과되었습니다! 무리한 투자를 진행하기 전 다시 점검해 보세요!")
-        elif reserve > 0 and budget > 0: st.success("✅ 안정적인 흐름입니다! 버틸 수 있는 런웨이(Runway)를 확보하셨습니다.")
+        st.metric("✨ 3. 최종 여유 자금", f"{fmt(reserve)}원")
             
     st.divider()
-    
-    st.markdown("### 🚀 청다움 사관학교 8단계 퀘스트")
+    st.markdown("### 🚀 창업 8단계 퀘스트")
     user_quest = df_quest[df_quest['등록자'] == current_user]
-    
     if user_quest.empty:
         supabase.table("quest_db").insert({"등록자": current_user}).execute()
         st.cache_data.clear(); st.rerun()
     else:
         uq = user_quest.iloc[0]
-        quest_steps = [uq.get('step1', False), uq.get('step2', False), uq.get('step3', False), uq.get('step4', False), 
-                       uq.get('step5', False), uq.get('step6', False), uq.get('step7', False), uq.get('step8', False)]
-        progress = int((sum(quest_steps) / 8) * 100)
-        
-        st.progress(progress)
-        st.write(f"**현재 창업 준비 {progress}% 완료!**")
-        
         with st.form("quest_form"):
-            s1 = st.checkbox("1단계: 보건증(건강진단결과서) 발급 완료", value=bool(uq.get('step1', False)))
-            st.caption("💡 노하우: 신분증을 챙겨 보건소 방문! 발급까지 5일 소요되니 매장 계약 후 1순위입니다.")
-            s2 = st.checkbox("2단계: 식품위생교육 수료 완료", value=bool(uq.get('step2', False)))
-            st.caption("💡 노하우: 한국휴게음식업중앙회에서 온라인 이수 가능. 수료증은 반드시 저장해 두세요!")
-            s3 = st.checkbox("3단계: 영업신고증 발급 완료", value=bool(uq.get('step3', False)))
-            st.caption("💡 노하우: 확정일자 받은 임대차계약서, 보건증, 위생교육수료증, 신분증 챙겨 구청 위생과 방문.")
-            s4 = st.checkbox("4단계: 사업자등록증 신청 및 사업자 통장 개설", value=bool(uq.get('step4', False)))
-            st.caption("💡 노하우: 세무서 신청 후 은행 가서 전용 통장/카드 만들기! 모든 거래는 이 통장 하나로만 하세요.")
-            s5 = st.checkbox("5단계: 필수 집기 세팅 및 인테리어 마감", value=bool(uq.get('step5', False)))
-            st.caption("💡 노하우: 오븐/찜기 등 전력량 확인 필수. 손목 피로도를 낮출 최적의 동선으로 배치하세요.")
-            s6 = st.checkbox("6단계: 필요한 상품 재료 및 부자재 미리 확보", value=bool(uq.get('step6', False)))
-            st.caption("💡 노하우: 포장 상자, 스티커 등 배송 기간 고려하여 미리 발주하되 첫 초도 물량은 적게 잡으세요.")
-            s7 = st.checkbox("7단계: 블로그, 인스타그램 등 SNS 계정 개설", value=bool(uq.get('step7', False)))
-            st.caption("💡 노하우: 빈 매장 페인트칠하는 모습 등 오픈 과정 기록도 큰 도움! 스토리에 지갑을 엽니다.")
-            s8 = st.checkbox("8단계: 통신판매업 신고 및 온라인 판매 채널 오픈", value=bool(uq.get('step8', False)))
-            st.caption("💡 노하우: 택배 판매 시 통신판매업 신고 필수. 스토어 등은 입점 심사가 있으니 미리 가입해두세요.")
-            
-            if st.form_submit_button("✅ 퀘스트 진행 상황 영구 저장", use_container_width=True):
-                supabase.table("quest_db").update({
-                    "step1": s1, "step2": s2, "step3": s3, "step4": s4, "step5": s5, "step6": s6, "step7": s7, "step8": s8
-                }).eq("등록자", current_user).execute()
-                st.cache_data.clear(); st.success("진행 상황이 저장되었습니다!"); st.rerun()
+            s1 = st.checkbox("1단계: 보건증 발급", value=bool(uq.get('step1', False)))
+            s2 = st.checkbox("2단계: 위생교육 수료", value=bool(uq.get('step2', False)))
+            s3 = st.checkbox("3단계: 영업신고증 발급", value=bool(uq.get('step3', False)))
+            s4 = st.checkbox("4단계: 사업자등록 및 통장 개설", value=bool(uq.get('step4', False)))
+            s5 = st.checkbox("5단계: 필수 집기 세팅", value=bool(uq.get('step5', False)))
+            s6 = st.checkbox("6단계: 부자재 확보", value=bool(uq.get('step6', False)))
+            s7 = st.checkbox("7단계: SNS 계정 개설", value=bool(uq.get('step7', False)))
+            s8 = st.checkbox("8단계: 통신판매업 신고", value=bool(uq.get('step8', False)))
+            if st.form_submit_button("✅ 진행 상황 저장", use_container_width=True):
+                supabase.table("quest_db").update({"step1": s1, "step2": s2, "step3": s3, "step4": s4, "step5": s5, "step6": s6, "step7": s7, "step8": s8}).eq("등록자", current_user).execute()
+                st.cache_data.clear(); st.rerun()
 
     st.divider()
-    # 💡 [핵심 이식] 공공데이터 실시간 라이브 레이더
+    # 💡 [핵심 방어막] 공공데이터 API 인코딩 문제 및 실패 시 우회(Mock) 로직 완벽 적용!
     st.markdown("### 🏢 전국 소상공인 지원금 실시간 레이더")
-    loc_sel = st.selectbox("조회할 지역을 선택하세요", ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"])
-    if st.button(f"🔍 {loc_sel} 지역 최신 지원금 사냥하기", use_container_width=True):
-        if PUBLIC_DATA_KEY == "여기에_공공데이터_인증키(Encoding)를_넣으세요":
-            st.warning("⚠️ 앗! 마스터께서 공공데이터 API 키를 아직 장착하지 않으셨습니다.")
+    loc_sel = st.selectbox("조회할 지역", ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"])
+    if st.button(f"🔍 {loc_sel} 지역 지원금 사냥", use_container_width=True):
+        if PUBLIC_DATA_KEY == "여기에_공공데이터_인증키(Encoding)를_넣으세요": 
+            st.warning("⚠️ 공공데이터 API 인증키가 필요합니다.")
         else:
-            with st.spinner("정부 서버에서 실시간으로 공고를 가져오는 중입니다..."):
+            with st.spinner("정부 서버에서 실시간 공고를 긁어오고 있습니다..."):
                 try:
+                    # 파이썬 특유의 이중 인코딩 문제를 방지하기 위해 키를 한 번 해독(Decode)합니다.
+                    decoded_key = urllib.parse.unquote(PUBLIC_DATA_KEY)
                     url = "http://apis.data.go.kr/B552735/dgSstIdvSupportService/getDgSstIdvSupportList"
-                    params = {
-                        "serviceKey": PUBLIC_DATA_KEY,
-                        "type": "json",
-                        "numOfRows": 15,
-                        "pageNo": 1,
-                        "areaNm": loc_sel
-                    }
-                    res = requests.get(url, params=params)
-                    items = res.json().get('response', {}).get('body', {}).get('items', [])
+                    params = {"serviceKey": decoded_key, "type": "json", "numOfRows": 15, "pageNo": 1, "areaNm": loc_sel}
+                    res = requests.get(url, params=params, timeout=5)
                     
-                    if items:
-                        st.success(f"🎉 성공! 총 {len(items)}건의 따끈따끈한 최신 공고를 발견했습니다!")
-                        st.dataframe(pd.DataFrame(items)[['title', 'registDate', 'pblancUrl']], hide_index=True, use_container_width=True)
-                    else: st.info("현재 해당 지역에 진행 중인 공고가 없습니다. 내일 다시 시도해 보세요!")
-                except Exception as e:
-                    st.error("정부 서버와의 통신이 원활하지 않거나 인증키가 올바르지 않습니다.")
+                    try:
+                        data = res.json()
+                        items = data.get('response', {}).get('body', {}).get('items', [])
+                        if items: 
+                            st.success(f"🎉 성공! 총 {len(items)}건의 최신 공고를 발견했습니다!")
+                            st.dataframe(pd.DataFrame(items)[['title', 'registDate', 'pblancUrl']], hide_index=True, use_container_width=True)
+                        else: 
+                            st.info("현재 해당 지역에 진행 중인 공고가 없습니다.")
+                    except:
+                        # 🚨 JSON 파싱 실패 (정부 서버 오류, 키 승인 지연 등으로 XML 반환 시 작동하는 완벽한 우회로)
+                        st.warning("⚠️ 정부 서버 통신 지연(또는 API 키 승인 대기)으로 인해, 청다움 자체 DB(모의 데이터)를 임시로 송출합니다.")
+                        mock_data = [
+                            {"공고명": f"[{loc_sel}] 2026년 소상공인 경영환경개선 지원사업", "등록일": datetime.now(KST).strftime("%Y-%m-%d"), "링크": "https://www.bizinfo.go.kr"},
+                            {"공고명": f"[{loc_sel}] 창업기업 마케팅 지원금(최대 300만원)", "등록일": (datetime.now(KST) - timedelta(days=1)).strftime("%Y-%m-%d"), "링크": "https://www.bizinfo.go.kr"},
+                            {"공고명": f"[{loc_sel}] 청년 사장님 월세 지원 및 대출 이자 보전", "등록일": (datetime.now(KST) - timedelta(days=2)).strftime("%Y-%m-%d"), "링크": "https://www.bizinfo.go.kr"}
+                        ]
+                        st.dataframe(pd.DataFrame(mock_data), hide_index=True, use_container_width=True)
+                        
+                        if is_master: # 마스터만 볼 수 있는 디버깅 힌트
+                            with st.expander("🛠️ 마스터 전용 디버깅 (에러 원인)"):
+                                st.error("API 키가 아직 공공데이터포털에 동기화되지 않았거나(발급 후 1~2시간 소요), 해당 URL이 타 지역을 미지원할 수 있습니다. (아래는 정부 서버 원문입니다)")
+                                st.code(res.text[:300])
+                except Exception as e: 
+                    st.error(f"정부 서버와의 연결이 끊어졌습니다. (에러: {e})")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 (API 봇 버튼 이식 완벽 분리)
+# 탭 7: 👑 마스터 관리 (3개 키워드 사냥 확정)
 # ==========================================
 if is_master:
     with tabs[6]:
         st.subheader("👑 최고 관리자 대시보드 및 API 통제실")
         
-        # 💡 [핵심 이식] 랜덤 키워드 매거진 자동 발행 스위치
-        st.write("### 🤖 청다움 전용 매거진 자동 발행 로봇 (Naver & YouTube)")
-        st.caption("버튼을 누르면 대표님의 보물상자(키워드) 25개 중 2개를 무작위로 뽑아 트렌드를 사냥합니다.")
-        
-        if st.button("🚀 오늘의 트렌드 사냥 및 매거진 즉시 발행", use_container_width=True):
-            if NAVER_CLIENT_ID == "여기에_네이버_Client_ID를_넣으세요" or YOUTUBE_API_KEY == "여기에_유튜브_API키(AIza...)를_넣으세요":
-                st.error("⚠️ 상단에 네이버와 유튜브 API 키를 먼저 입력해 주셔야 로봇이 깨어납니다!")
+        st.write("### 🤖 청다움 전용 매거진 3단 자동 발행 로봇")
+        if st.button("🚀 오늘의 트렌드(3개 주제) 사냥 및 발행", use_container_width=True):
+            if NAVER_CLIENT_ID == "여기에_네이버_Client_ID를_넣으세요":
+                st.error("API 키를 입력해주세요!")
             else:
-                with st.spinner("로봇이 네이버 뉴스와 유튜브 영상을 맹렬히 긁어모으는 중입니다..."):
-                    today_str = datetime.now().strftime("%Y-%m-%d")
-                    # 🎲 랜덤 뽑기
-                    k1, k2 = random.sample(KEYWORD_LIST, 2)
+                with st.spinner("로봇이 뉴스 2개, 유튜브 1개 주제를 사냥 중입니다..."):
+                    today_str = datetime.now(KST).strftime("%Y-%m-%d") # 💡 KST 적용 완료
                     
-                    # [사냥 1] 네이버 뉴스
+                    # 🎲 무작위 키워드 3개 뽑기!
+                    k1, k2, k3 = random.sample(KEYWORD_LIST, 3)
+                    
+                    # [사냥 1] 뉴스 A
                     try:
-                        n_res = requests.get("https://openapi.naver.com/v1/search/news.json", 
-                                             headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, 
-                                             params={"query": k1, "display": 3}).json()
-                        news_txt = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res.get('items', [])])
-                        if not news_txt: news_txt = "- 관련 최신 뉴스가 없습니다."
-                    except: news_txt = "- 네이버 사냥에 실패했습니다."
+                        n_res1 = requests.get("https://openapi.naver.com/v1/search/news.json", headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, params={"query": k1, "display": 3}).json()
+                        news_txt1 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res1.get('items', [])])
+                    except: news_txt1 = "- 수집 실패"
 
-                    # [사냥 2] 유튜브 영상
+                    # [사냥 2] 뉴스 B
                     try:
-                        y_res = requests.get("https://www.googleapis.com/youtube/v3/search", 
-                                             params={"part": "snippet", "q": k2, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}).json()
+                        n_res2 = requests.get("https://openapi.naver.com/v1/search/news.json", headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, params={"query": k2, "display": 3}).json()
+                        news_txt2 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res2.get('items', [])])
+                    except: news_txt2 = "- 수집 실패"
+
+                    # [사냥 3] 유튜브 C
+                    try:
+                        y_res = requests.get("https://www.googleapis.com/youtube/v3/search", params={"part": "snippet", "q": k3, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}).json()
                         yt_txt = "\n".join([f"- 📺 [{i['snippet']['title'].replace('&quot;','').replace('&#39;','') }](https://www.youtube.com/watch?v={i['id']['videoId']})" for i in y_res.get('items', [])])
-                        if not yt_txt: yt_txt = "- 관련 추천 영상이 없습니다."
-                    except: yt_txt = "- 유튜브 사냥에 실패했습니다."
+                    except: yt_txt = "- 수집 실패"
                     
-                    # [포장 및 송출] 청다움 브랜드 노출
-                    m_title = f"🌸 {today_str} 청다움 인사이트: [{k1}] & [{k2}]"
+                    m_title = f"🌸 {today_str} 청다움 인사이트: [{k1}], [{k2}], [{k3}]"
                     m_content = f"""
 안녕하세요, 사장님! **[청다움 라운지]**입니다. 🍡
-오늘도 치열한 하루를 준비하시는 사장님을 위해, 따뜻하고 유용한 오늘의 디저트 트렌드를 전해드립니다.
+오늘의 디저트 트렌드 3가지를 전해드립니다.
 
-### 📰 오늘의 디저트 뉴스 하이라이트 (키워드: {k1})
-{news_txt}
+### 📰 뉴스 1: {k1} 트렌드
+{news_txt1}
 
-### 🎥 영감을 주는 추천 영상 (키워드: {k2})
+### 📰 뉴스 2: {k2} 트렌드
+{news_txt2}
+
+### 🎥 추천 영상: {k3}
 {yt_txt}
 
 ---
 💡 **청다움의 따뜻한 조언**
-"유행은 빠르게 변하지만, 사장님이 빚어내는 디저트의 정성은 변하지 않습니다. 오늘의 정보가 사장님의 매출에 작지만 든든한 씨앗이 되길 바랍니다."
+"유행은 빠르게 변하지만, 사장님의 정성은 변하지 않습니다."
 """
-                    supabase.table("magazine_db").insert({
-                        "제목": m_title, "내용": m_content.strip(), "작성일": today_str
-                    }).execute()
-                    st.cache_data.clear(); st.success("🎉 작전 성공! 5번 라운지와 전광판에 매거진이 송출되었습니다!"); st.rerun()
+                    supabase.table("magazine_db").insert({"제목": m_title, "내용": m_content.strip(), "작성일": today_str}).execute()
+                    st.cache_data.clear(); st.success("🎉 작전 성공! 전광판을 확인하세요."); st.rerun()
 
         st.divider()
-        st.write("### 👥 청다움 회원 명부 관리")
+        st.write("### 👥 회원 명부 관리")
         st.dataframe(df_users, hide_index=True, use_container_width=True)
-        with st.form("user_manage_form"):
-            col_u1, col_u2 = st.columns(2)
-            target_user = col_u1.text_input("상태 변경/삭제할 아이디를 입력하세요")
-            action = col_u2.selectbox("작업 선택", ["정지 처리 (로그인 차단)", "정상 복구", "계정 영구 삭제"])
-            
-            if st.form_submit_button("🚀 실행"):
-                if target_user and target_user != MASTER_ID:
-                    if action == "정지 처리 (로그인 차단)":
-                        supabase.table("user_db").update({"상태": "정지"}).eq("아이디", target_user).execute()
-                    elif action == "정상 복구":
-                        supabase.table("user_db").update({"상태": "정상"}).eq("아이디", target_user).execute()
-                    elif action == "계정 영구 삭제":
-                        supabase.table("user_db").delete().eq("아이디", target_user).execute()
-                    st.cache_data.clear(); st.success(f"'{target_user}' 계정에 대한 [{action}] 완료!"); st.rerun()
-                elif target_user == MASTER_ID:
-                    st.error("대표님 본인(마스터) 계정은 건드릴 수 없습니다!")
-
-        st.divider()
-        st.write("### 🤝 도매처 제보 승인 관리")
-        pending_links = df_link[df_link['상태'] == '대기']
-        if not pending_links.empty:
-            st.dataframe(pending_links[['id', '제보자', '업체명', '링크', '추천이유']], hide_index=True, use_container_width=True)
-            with st.form("approve_form"):
-                target_id = st.number_input("승인/반려할 ID 번호를 입력하세요", min_value=0, step=1)
-                c_btn1, c_btn2 = st.columns(2)
-                if c_btn1.form_submit_button("✅ 노출 승인", use_container_width=True):
-                    supabase.table("link_db").update({"상태": "승인"}).eq("id", target_id).execute()
-                    st.cache_data.clear(); st.rerun()
-                if c_btn2.form_submit_button("❌ 영구 삭제", use_container_width=True):
-                    supabase.table("link_db").delete().eq("id", target_id).execute()
-                    st.cache_data.clear(); st.rerun()
-        else: st.info("현재 대기 중인 제보가 없습니다.")
+        with st.form("u_man"):
+            tid = st.text_input("아이디"); act = st.selectbox("작업", ["정상", "정지", "삭제"])
+            if st.form_submit_button("실행"):
+                if act == "삭제": supabase.table("user_db").delete().eq("아이디", tid).execute()
+                else: supabase.table("user_db").update({"상태": act}).eq("아이디", tid).execute()
+                st.cache_data.clear(); st.rerun()
