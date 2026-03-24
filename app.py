@@ -7,8 +7,8 @@ from streamlit_gsheets import GSheetsConnection
 # ==========================================
 # 👑 [0] 마스터(최고 관리자) 설정
 # ==========================================
-MASTER_ID = "ceo_kyle"    # 대표님의 마스터 아이디
-MASTER_PW = "7777"        # 대표님의 마스터 비밀번호
+MASTER_ID = "cheongdaum"    # 대표님의 마스터 아이디
+MASTER_PW = "150328"        # 대표님의 마스터 비밀번호
 
 # --- [1] 시스템 설정 ---
 st.set_page_config(page_title="청다움 마스터 V32.0", page_icon="🍡", layout="wide")
