@@ -11,7 +11,7 @@ MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
 MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V35.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V36.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -21,14 +21,14 @@ def fmt(val):
     except: 
         return str(val)
 
-# --- [2] 구글 시트 메인 서버 3대 장부 연결 ---
+# --- [2] 구글 시트 메인 서버 4대 장부 연결 ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # [장부 1] 상품 마스터 로드 (기본 첫 번째 시트)
+    # [장부 1] 상품 마스터
     df_master = conn.read(ttl=15)
     
-    # [장부 2] 회원 명부 로드 (user_db 시트)
+    # [장부 2] 회원 명부
     try:
         df_users = conn.read(worksheet="user_db", ttl=15)
         if df_users.empty:
@@ -36,7 +36,7 @@ try:
     except Exception:
         df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
         
-    # [장부 3] 매출 기록부 로드 (sales_db 시트)
+    # [장부 3] 매출 기록부
     try:
         df_sales = conn.read(worksheet="sales_db", ttl=15)
         if df_sales.empty:
@@ -44,20 +44,25 @@ try:
     except Exception:
         df_sales = pd.DataFrame(columns=["등록자", "날짜", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
 
+    # [장부 4] 🆕 월별 지출 기록부 (expense_db)
+    try:
+        df_expenses = conn.read(worksheet="expense_db", ttl=15)
+        if df_expenses.empty:
+            df_expenses = pd.DataFrame(columns=["등록자", "월", "월세", "추가인건비", "공과금", "세금", "기타비용"])
+    except Exception:
+        df_expenses = pd.DataFrame(columns=["등록자", "월", "월세", "추가인건비", "공과금", "세금", "기타비용"])
+
     # 데이터 정제 (소수점 유령 및 공백 제거)
     if not df_users.empty:
         df_users.fillna("", inplace=True)
         df_users["아이디"] = df_users["아이디"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         df_users["비밀번호"] = df_users["비밀번호"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
-    if not df_master.empty and '등록자' not in df_master.columns:
-        df_master['등록자'] = MASTER_ID
-        
-    if not df_master.empty and '등록자' in df_master.columns:
-        df_master['등록자'] = df_master['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-        
-    if not df_sales.empty and '등록자' in df_sales.columns:
-        df_sales['등록자'] = df_sales['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    for df_temp in [df_master, df_sales, df_expenses]:
+        if not df_temp.empty and '등록자' not in df_temp.columns:
+            df_temp['등록자'] = MASTER_ID
+        if not df_temp.empty and '등록자' in df_temp.columns:
+            df_temp['등록자'] = df_temp['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
 except Exception as e:
     st.error("🚦 현재 구글 서버에 접속자가 많아 대기 중입니다. 약 15초 후 새로고침(F5) 해주세요.")
@@ -98,7 +103,7 @@ if not st.session_state.logged_in:
                             st.session_state.current_user = user_id_str
                             st.rerun()
                         else:
-                            st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
+                            st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다.")
                     else:
                         st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
                     
@@ -128,25 +133,23 @@ if not st.session_state.logged_in:
                         st.cache_resource.clear()
                         st.success(f"가입 완료! 이제 '{new_id_str}'로 로그인해 주세요.")
                     except Exception:
-                        st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
+                        st.error("서버 과부하로 가입이 지연되었습니다.")
     st.stop()
 
 # --- [4] 개인별 칸막이 연동 및 월별 캘린더 세팅 ---
 current_user = st.session_state.current_user
 
-# 1. 상품 목록 필터링
 if not df_master.empty and '등록자' in df_master.columns:
     df_p = df_master[df_master['등록자'] == current_user]
 else:
     df_p = pd.DataFrame()
 
-# 2. 매출 기록 필터링 및 '월(Month)' 리스트 생성
+# 매출 기록 필터링 및 '월(Month)' 리스트 생성
 if not df_sales.empty and '등록자' in df_sales.columns:
     user_sales = df_sales[df_sales['등록자'] == current_user].copy()
     if not user_sales.empty:
         user_sales['월'] = pd.to_datetime(user_sales['날짜']).dt.strftime('%Y-%m')
         month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
-        # 이번 달이 목록에 없다면 강제로 추가
         curr_m = datetime.now().strftime('%Y-%m')
         if curr_m not in month_list:
             month_list.insert(0, curr_m)
@@ -204,7 +207,7 @@ c1, c2 = st.columns([3, 1])
 with c2:
     selected_month = st.selectbox("📅 장부 조회 월(Month)", month_list)
 
-# 선택된 월의 데이터만 추출 (탭 2, 3, 4에서 공통으로 사용됩니다)
+# 선택된 월의 데이터만 추출
 if not user_sales.empty:
     monthly_sales = user_sales[user_sales['월'] == selected_month].copy()
 else:
@@ -221,7 +224,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v35_reg_form"):
+    with st.form("v36_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -253,7 +256,7 @@ with tabs[0]:
                     st.success(f"🎉 '{p_name}' 저장 완료!")
                     st.rerun()
                 except Exception:
-                    st.error("서버 과부하로 저장이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
+                    st.error("서버 과부하로 저장이 지연되었습니다.")
 
     st.divider()
     if not df_p.empty:
@@ -274,7 +277,7 @@ with tabs[0]:
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적 (정밀 타겟 삭제 추가)
+# 탭 2: 월간 매출 실적
 # ==========================================
 with tabs[1]:
     with st.expander(f"🚩 {selected_month}월 목표 설정", expanded=True):
@@ -323,25 +326,22 @@ with tabs[1]:
         st.divider()
         st.write(f"### 📑 {selected_month}월 상세 판매현황")
         
-        # 🗑️ [핵심 업데이트] 콕 집어서 삭제하는 기능
         with st.expander("🗑️ 입력 오류 삭제 (원하는 항목만 선택 삭제)", expanded=False):
             del_options = {}
             for idx, row in monthly_sales.iterrows():
-                # 목록에 날짜, 상품, 수량, 금액을 명확히 보여줍니다.
                 display_text = f"[{row['날짜']}] {row['상품명']} - {row['수량']}개 (총매출: {fmt(row['총매출'])}원)"
                 del_options[display_text] = idx
                 
             sel_del_str = st.selectbox("삭제할 판매 기록을 정확히 선택하세요", list(del_options.keys()))
             
             if st.button("❌ 선택한 기록 완전 삭제", use_container_width=True):
-                target_idx = del_options[sel_del_str] # 구글 시트 원본의 고유 번호를 찾습니다.
-                updated_sales_df = df_sales.drop(target_idx) # 원본 장부에서 해당 줄만 뽑아냅니다.
+                target_idx = del_options[sel_del_str] 
+                updated_sales_df = df_sales.drop(target_idx) 
                 conn.update(worksheet="sales_db", data=updated_sales_df)
                 st.cache_data.clear()
                 st.warning("선택하신 기록이 삭제되었습니다.")
                 st.rerun()
 
-        # 데이터 표시
         disp_sales = monthly_sales.copy()
         for col in ["판매가", "총매출", "순익"]:
             disp_sales[col] = pd.to_numeric(disp_sales[col], errors='coerce').fillna(0)
@@ -364,7 +364,7 @@ with tabs[1]:
         st.info(f"선택하신 {selected_month}월의 판매 기록이 없습니다.")
 
 # ==========================================
-# 탭 3: 성과 분석 (선택된 월별 데이터 자동 연동)
+# 탭 3: 성과 분석 
 # ==========================================
 with tabs[2]:
     st.subheader(f"🏆 {selected_month}월 상품별 성과 분석")
@@ -415,18 +415,53 @@ with tabs[2]:
         pass
 
 # ==========================================
-# 탭 4: 최종 경영 결산 (선택된 월별 데이터 자동 연동)
+# 탭 4: 🆕 월별 지출 영구 저장 및 최종 결산
 # ==========================================
 with tabs[3]:
     st.subheader(f"🏭 {selected_month}월 최종 경영 결산")
     
-    with st.expander(f"💸 {selected_month}월 외부 지출 입력 (세금 포함)", expanded=True):
-        c1, c2, c3, c4, c5 = st.columns(5)
-        rent = c1.number_input("월세", value=0, step=10000)
-        labor = c2.number_input("추가 인건비 (알바 등)", value=0, step=10000)
-        tax = c3.number_input("공과금", value=0, step=10000)
-        tax2 = c4.number_input("세금", value=0, step=10000)
-        etc = c5.number_input("기타비용", value=0, step=10000)
+    # 현재 유저와 선택된 월의 지출 데이터 불러오기
+    if not df_expenses.empty:
+        user_exp = df_expenses[(df_expenses['등록자'] == current_user) & (df_expenses['월'] == selected_month)]
+        if not user_exp.empty:
+            curr_e = user_exp.iloc[0]
+            v_rent = int(curr_e.get('월세', 0))
+            v_labor = int(curr_e.get('추가인건비', 0))
+            v_tax1 = int(curr_e.get('공과금', 0))
+            v_tax2 = int(curr_e.get('세금', 0))
+            v_etc = int(curr_e.get('기타비용', 0))
+        else:
+            v_rent = v_labor = v_tax1 = v_tax2 = v_etc = 0
+    else:
+        v_rent = v_labor = v_tax1 = v_tax2 = v_etc = 0
+
+    with st.expander(f"💸 {selected_month}월 외부 지출 입력 및 저장", expanded=True):
+        with st.form("expense_form"):
+            c1, c2, c3, c4, c5 = st.columns(5)
+            rent = c1.number_input("월세", value=v_rent, step=10000)
+            labor = c2.number_input("추가 인건비 (알바 등)", value=v_labor, step=10000)
+            tax = c3.number_input("공과금", value=v_tax1, step=10000)
+            tax2 = c4.number_input("세금", value=v_tax2, step=10000)
+            etc = c5.number_input("기타비용", value=v_etc, step=10000)
+            
+            if st.form_submit_button("💾 이 달의 고정 지출 영구 저장", use_container_width=True):
+                # 기존 데이터가 있으면 삭제하고 새로 덮어쓰기
+                cond = (df_expenses['등록자'] == current_user) & (df_expenses['월'] == selected_month)
+                updated_exp_df = df_expenses[~cond]
+                
+                new_exp = pd.DataFrame([{
+                    "등록자": current_user, "월": selected_month,
+                    "월세": rent, "추가인건비": labor, "공과금": tax, "세금": tax2, "기타비용": etc
+                }])
+                
+                final_exp_df = pd.concat([updated_exp_df, new_exp], ignore_index=True)
+                try:
+                    conn.update(worksheet="expense_db", data=final_exp_df)
+                    st.cache_data.clear()
+                    st.success(f"✅ {selected_month}월의 지출 내역이 영구히 저장되었습니다!")
+                    st.rerun()
+                except Exception:
+                    st.error("서버 저장 지연 중입니다.")
         
     total_expenses = rent + labor + tax + tax2 + etc
     st.write(f"**외부비용 합계:** {fmt(total_expenses)}원")
@@ -500,8 +535,8 @@ if current_user == MASTER_ID:
             st.warning("현재 회원 명부를 불러오고 있습니다. 잠시 후 확인해 주세요.")
 
         st.divider()
-        st.write("### 🗄️ 플랫폼 데이터 전수 조사 (전체 회원 상품/매출 DB)")
-        c1, c2 = st.tabs(["📦 전체 상품 장부", "🧾 전체 매출 장부"])
+        st.write("### 🗄️ 플랫폼 데이터 전수 조사")
+        c1, c2, c3 = st.tabs(["📦 상품 장부", "🧾 매출 장부", "💸 지출 장부"])
         with c1:
             if not df_master.empty:
                 disp_master = df_master.copy()
@@ -511,7 +546,6 @@ if current_user == MASTER_ID:
                 st.dataframe(disp_master, use_container_width=True)
             else:
                 st.write("등록된 상품 데이터가 없습니다.")
-                
         with c2:
             if not df_sales.empty:
                 disp_sales_all = df_sales.copy()
@@ -521,3 +555,12 @@ if current_user == MASTER_ID:
                 st.dataframe(disp_sales_all, use_container_width=True)
             else:
                 st.write("등록된 매출 데이터가 없습니다.")
+        with c3:
+            if not df_expenses.empty:
+                disp_exp_all = df_expenses.copy()
+                for col in ["월세", "추가인건비", "공과금", "세금", "기타비용"]:
+                    if col in disp_exp_all.columns:
+                        disp_exp_all[col] = pd.to_numeric(disp_exp_all[col], errors='coerce').fillna(0).apply(fmt)
+                st.dataframe(disp_exp_all, use_container_width=True)
+            else:
+                st.write("등록된 지출 데이터가 없습니다.")
