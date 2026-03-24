@@ -13,10 +13,10 @@ MASTER_PW = "150328"
 
 # 🔑 아까 복사해두신 주소와 키를 아래의 따옴표 안에 붙여넣어 주세요!
 SUPABASE_URL = "https://imgyafnhzrketbjfpxdt.supabase.co" 
-SUPABASE_KEY = "여기에_anon_API_Key를_붙여넣으세요"         
+SUPABASE_KEY = "sb_publishable_mXPEUz8UITZRpC9Q8d11og_2D1WQAYU"         
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
-st.set_page_config(page_title="청다움 마스터 V39.1", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V39.2", page_icon="🍡", layout="wide")
 
 hide_streamlit_style = """
 <style>
@@ -26,7 +26,6 @@ header {visibility: hidden;}
 [data-testid="stToolbar"] {visibility: hidden !important;}
 .viewerBadge_container__1QSob {display: none !important;}
 .viewerBadge_link__1S137 {display: none !important;}
-/* 모바일 키보드 가림 방지를 위한 폼 하단 여백 확보 */
 [data-testid="stForm"] {margin-bottom: 2rem;}
 </style>
 """
@@ -67,7 +66,6 @@ def load_all_data():
 
 try:
     df_users, df_master, df_sales, df_expenses = load_all_data()
-    # 마스터 계정이 DB에 없다면 최초 1회 강제 생성
     if df_users.empty or MASTER_ID not in df_users['아이디'].values:
         supabase.table("user_db").insert({"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}).execute()
         st.cache_data.clear()
@@ -166,7 +164,6 @@ with st.sidebar:
         
     st.divider()
     st.subheader("⚙️ 개인 설정")
-    # 💡 지시하신 대로 공임 초기값을 0으로 완벽 변경했습니다.
     hourly_wage = st.number_input("나의 시간당 공임(원)", value=0, step=1000) 
     
     st.divider()
@@ -210,28 +207,39 @@ else:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 실전 매출 입력", "🏆 성과 시각화", "🏭 경영 결산"])
 
 # ==========================================
-# 탭 1: 상품 등록 (키친코스트형 원가계산 & 모바일 UI 개선)
+# 탭 1: 상품 등록 (원재료 + 부자재 분리 합산 기능 추가)
 # ==========================================
 with tabs[0]:
-    # 모바일 키보드 가림 현상을 막기 위해 폼을 화면 최상단에 Expander로 고정 배치
     with st.expander("📍 신규 상품 영구 등록 (스마트 원가 계산기)", expanded=True):
-        with st.form("v39_1_reg_form"):
+        with st.form("v39_2_reg_form"):
             c1, c2, c3 = st.columns([2, 1, 1])
             p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
             target_m = c2.number_input("🎯 목표 마진", value=0.4, step=0.1)
             make_time = c3.number_input("⏱️ 제작 소요시간(분)", value=30, step=5)
             
-            st.info("💡 [키친코스트 방식] 대용량 구매가격과 실제 레시피 투입량을 적어주시면 원가가 자동 계산됩니다.")
-            bom_init = pd.DataFrame([{"항목": "백앙금", "총용량(g,ml)": 5000, "총가격(원)": 15000, "레시피 투입량(g,ml)": 300}])
-            bom = st.data_editor(bom_init, num_rows="dynamic", use_container_width=True)
+            st.write("🌿 **1. [원재료] 투입량 입력 (키친코스트 방식)**")
+            bom_recipe_init = pd.DataFrame([{"항목": "백앙금", "총용량(g,ml)": 5000, "총가격(원)": 15000, "레시피 투입량(g,ml)": 300}])
+            bom_recipe = st.data_editor(bom_recipe_init, num_rows="dynamic", use_container_width=True, key="bom_r")
+            
+            st.write("🎀 **2. [부자재] 단품 입력 (포장지, 상자 등)**")
+            bom_sub_init = pd.DataFrame([{"항목": "화과자 6구 케이스", "수량(개)": 1, "단가(원)": 800}])
+            bom_sub = st.data_editor(bom_sub_init, num_rows="dynamic", use_container_width=True, key="bom_s")
             
             if st.form_submit_button("💾 자동 계산 및 중앙 DB 영구 저장", use_container_width=True):
                 if p_name:
-                    # 1g당 단가를 도출하여 투입량과 곱하는 '키친코스트' 방식 로직 적용
-                    bom["단가계산"] = (pd.to_numeric(bom["총가격(원)"], errors='coerce').fillna(0) / 
-                                  pd.to_numeric(bom["총용량(g,ml)"], errors='coerce').replace(0, 1)) * \
-                                  pd.to_numeric(bom["레시피 투입량(g,ml)"], errors='coerce').fillna(0)
-                    cost = float(bom["단가계산"].sum())
+                    # 원재료 비용 계산 (1g당 단가 * 투입량)
+                    rc = pd.to_numeric(bom_recipe["총가격(원)"], errors='coerce').fillna(0)
+                    rv = pd.to_numeric(bom_recipe["총용량(g,ml)"], errors='coerce').replace(0, 1)
+                    rt = pd.to_numeric(bom_recipe["레시피 투입량(g,ml)"], errors='coerce').fillna(0)
+                    recipe_cost = (rc / rv) * rt
+                    
+                    # 부자재 비용 계산 (수량 * 단가)
+                    sq = pd.to_numeric(bom_sub["수량(개)"], errors='coerce').fillna(0)
+                    sp = pd.to_numeric(bom_sub["단가(원)"], errors='coerce').fillna(0)
+                    sub_cost = sq * sp
+                    
+                    # 두 비용 완벽 합산
+                    cost = float(recipe_cost.sum() + sub_cost.sum())
                     labor = (hourly_wage / 60) * make_time
                     price = float(np.round(cost / max(0.01, (1 - target_m)), -1))
                     
@@ -266,10 +274,10 @@ with tabs[0]:
         for col in ["원가", "권장가", "공임비"]:
             if col in disp.columns: 
                 disp[col] = disp[col].apply(fmt)
-        st.dataframe(disp, use_container_width=True)
+        st.dataframe(disp, hide_index=True, use_container_width=True)
 
 # ==========================================
-# 탭 2: 실전 매출 입력 (모바일 최적화 고정 입력 패널)
+# 탭 2: 실전 매출 입력 (목표 세팅 노출 및 하단 결과값 복구)
 # ==========================================
 with tabs[1]:
     st.subheader("⚡ 쾌속 매출 입력 패널")
@@ -311,10 +319,12 @@ with tabs[1]:
                     st.error("오류가 발생했습니다.")
     
     st.divider()
-    with st.expander(f"🚩 {selected_month}월 목표 세팅 (클릭하여 열기)"):
-        t1, t2 = st.columns(2)
-        st.session_state.targets['rev'] = t1.number_input("목표 총 매출액", value=st.session_state.targets['rev'])
-        st.session_state.targets['net'] = t2.number_input("목표 영업 순수익", value=st.session_state.targets['net'])
+    
+    # 💡 목표 세팅 숨김(expander) 해제, 바로 노출되도록 수정!
+    st.markdown("### 🚩 이번 달 목표 세팅")
+    t1, t2 = st.columns(2)
+    st.session_state.targets['rev'] = t1.number_input("목표 총 매출액", value=st.session_state.targets['rev'])
+    st.session_state.targets['net'] = t2.number_input("목표 영업 순수익", value=st.session_state.targets['net'])
 
     if not monthly_sales.empty:
         st.write(f"### 📑 {selected_month}월 매출 장부")
@@ -342,10 +352,19 @@ with tabs[1]:
         for col in ["판매가", "총매출", "순익"]: 
             ds[col] = ds[col].apply(lambda x: f"{fmt(x)}원")
             
-        st.dataframe(ds.drop(columns=['id', '등록자', '월'], errors='ignore'), use_container_width=True)
+        st.dataframe(ds.drop(columns=['id', '등록자', '월'], errors='ignore'), hide_index=True, use_container_width=True)
+        
+        # 💡 하단에 사라졌던 결과값(메트릭) 완벽 복구!
+        tr_tab2 = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
+        tn_tab2 = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum()
+        
+        st.divider()
+        col1, col2 = st.columns(2)
+        col1.metric("💰 총 매출액", f"{fmt(tr_tab2)}원", f"{fmt(tr_tab2 - st.session_state.targets['rev'])}원")
+        col2.metric("📈 영업 순이익", f"{fmt(tn_tab2)}원", f"{fmt(tn_tab2 - st.session_state.targets['net'])}원")
 
 # ==========================================
-# 탭 3: 성과 시각화 (Plotly 전문가용 차트 탑재)
+# 탭 3: 성과 시각화 (색상 분리 및 인덱스 번호 제거, 청다움 멘트 복구)
 # ==========================================
 with tabs[2]:
     st.subheader(f"🏆 {selected_month}월 심층 데이터 시각화")
@@ -362,32 +381,40 @@ with tabs[2]:
         fig1.update_traces(textposition='inside', textinfo='percent+label')
         c1.plotly_chart(fig1, use_container_width=True)
         
-        # 2. 상품별 매출 순위 가로형 바 차트
+        # 2. 상품별 매출 순위 가로형 바 차트 (💡 color='상품명' 추가하여 색상 분리)
         prod_data = an.groupby("상품명")["총매출"].sum().reset_index().sort_values("총매출", ascending=True)
-        fig2 = px.bar(prod_data, x='총매출', y='상품명', orientation='h', title="🏆 상품별 매출 순위", text_auto='.2s')
+        fig2 = px.bar(prod_data, x='총매출', y='상품명', color='상품명', orientation='h', title="🏆 상품별 매출 순위", text_auto='.2s')
+        fig2.update_layout(showlegend=False) # 범례를 숨겨서 화면을 깔끔하게 유지합니다.
         c2.plotly_chart(fig2, use_container_width=True)
         
         st.divider()
         g = an.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
         g["수익률"] = (g["순익"] / g["총매출"] * 100).round(1)
         
+        # 💡 hide_index=True 코드를 추가하여 거슬리는 숫자(0, 1, 2)를 완벽히 지웠습니다!
         c = st.columns(4)
         c[0].write("📊 **매출 Top 3**")
-        c[0].dataframe(g.sort_values("총매출", ascending=False).head(3)[["상품명", "총매출"]].assign(총매출=lambda x: x['총매출'].apply(fmt)), use_container_width=True)
+        c[0].dataframe(g.sort_values("총매출", ascending=False).head(3)[["상품명", "총매출"]].assign(총매출=lambda x: x['총매출'].apply(fmt)), hide_index=True, use_container_width=True)
         
         c[1].write("💰 **순익 Top 3**")
-        c[1].dataframe(g.sort_values("순익", ascending=False).head(3)[["상품명", "순익"]].assign(순익=lambda x: x['순익'].apply(fmt)), use_container_width=True)
+        c[1].dataframe(g.sort_values("순익", ascending=False).head(3)[["상품명", "순익"]].assign(순익=lambda x: x['순익'].apply(fmt)), hide_index=True, use_container_width=True)
         
         c[2].write("📈 **효자상품 (수익률)**")
-        c[2].dataframe(g.sort_values("수익률", ascending=False).head(3)[["상품명", "수익률"]].assign(수익률=lambda x: x['수익률'].astype(str) + "%"), use_container_width=True)
+        c[2].dataframe(g.sort_values("수익률", ascending=False).head(3)[["상품명", "수익률"]].assign(수익률=lambda x: x['수익률'].astype(str) + "%"), hide_index=True, use_container_width=True)
         
         c[3].write("📦 **인기상품 (수량)**")
-        c[3].dataframe(g.sort_values("수량", ascending=False).head(3)[["상품명", "수량"]], use_container_width=True)
-    else:
-        st.info("데이터가 충분하지 않아 차트를 그릴 수 없습니다.")
+        c[3].dataframe(g.sort_values("수량", ascending=False).head(3)[["상품명", "수량"]], hide_index=True, use_container_width=True)
+        
+    try: 
+        # 💡 잃어버렸던 청다움의 영혼, 따뜻한 멘트 이미지 복구 완료!
+        st.divider()
+        st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
+        st.image("청다움 멘트.png", use_container_width=True)
+    except: 
+        pass
 
 # ==========================================
-# 탭 4: 최종 경영 결산 (군더더기 이펙트 완전 배제)
+# 탭 4: 최종 경영 결산 
 # ==========================================
 with tabs[3]:
     st.subheader(f"🏭 {selected_month}월 현금 흐름 결산")
@@ -490,10 +517,10 @@ if is_master:
         
         c = st.tabs(["📦 상품 장부", "🧾 매출 장부", "💸 지출 장부", "👥 회원 장부"])
         with c[0]: 
-            st.dataframe(df_master.drop(columns=['id'], errors='ignore'), use_container_width=True)
+            st.dataframe(df_master.drop(columns=['id'], errors='ignore'), hide_index=True, use_container_width=True)
         with c[1]: 
-            st.dataframe(df_sales.drop(columns=['id'], errors='ignore'), use_container_width=True)
+            st.dataframe(df_sales.drop(columns=['id'], errors='ignore'), hide_index=True, use_container_width=True)
         with c[2]: 
-            st.dataframe(df_expenses.drop(columns=['id'], errors='ignore'), use_container_width=True)
+            st.dataframe(df_expenses.drop(columns=['id'], errors='ignore'), hide_index=True, use_container_width=True)
         with c[3]: 
-            st.dataframe(df_users, use_container_width=True)
+            st.dataframe(df_users, hide_index=True, use_container_width=True)
