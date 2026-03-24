@@ -367,7 +367,7 @@ with tabs[0]:
 # 탭 2: 실전 매출 입력 
 # ==========================================
 with tabs[1]:
-    st.subheader("⚡ 쾌속 매출 입력 패널")
+    st.subheader("⚡ 매출 입력 패널")
     if not df_p.empty:
         with st.container():
             col_a, col_b = st.columns([1, 1])
