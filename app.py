@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 from supabase import create_client, Client
 import plotly.express as px
-import requests  # API 통신을 위한 필수 부품
+import requests
 
 # ==========================================
 # 👑 [0] 마스터 및 황금 열쇠(API/DB) 설정 구역
@@ -16,14 +16,14 @@ MASTER_PW = "150328"
 SUPABASE_URL = "https://imgyafnhzrketbjfpxdt.supabase.co" 
 SUPABASE_KEY = "여기에_anon_API_Key를_붙여넣으세요"         
 
-# 2. 외부 데이터 사냥용 3대 API 키 (사전작업 3)
+# 2. 외부 데이터 사냥용 3대 API 키
 PUBLIC_DATA_KEY = "여기에_공공데이터_일반인증키(Encoding)를_넣으세요"
 YOUTUBE_API_KEY = "여기에_유튜브_API키(AIza...)를_넣으세요"
 NAVER_CLIENT_ID = "여기에_네이버_Client_ID를_넣으세요"
 NAVER_CLIENT_SECRET = "여기에_네이버_Client_Secret을_넣으세요"
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
-st.set_page_config(page_title="청다움 마스터 V41.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V41.1", page_icon="🍡", layout="wide")
 
 hide_streamlit_style = """
 <style>
@@ -180,7 +180,7 @@ with st.sidebar:
 # --- [6] 메인 화면 & 🚨 최상단 전광판 배너 ---
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
-# 전광판 배너 (가장 최근 매거진 제목을 불러와서 은밀하게 유혹합니다)
+# 전광판 배너
 latest_news = df_magazine.iloc[0]['제목'] if not df_magazine.empty else "청다움 라운지에 새로운 디저트 트렌드와 꿀 거래처가 업데이트되었습니다!"
 st.markdown(f"""
 <div class="marquee-banner">
@@ -193,13 +193,13 @@ with c2: selected_month = st.selectbox("📅 장부 조회 월(Month)", month_li
 
 monthly_sales = user_sales[user_sales['월'] == selected_month] if not user_sales.empty else pd.DataFrame()
 
-# 💡 탭 배열 확정! (라운지 5번, 퀘스트 6번)
+# 💡 탭 배열 (라운지 5번, 퀘스트 6번)
 tab_names = ["📊 상품 정보 등록", "📈 실전 매출 입력", "🏆 성과 시각화", "🏭 경영 결산", "🎓 청다움 라운지", "🚀 창업 퀘스트"]
 if is_master: tab_names.append("👑 마스터 관리")
 tabs = st.tabs(tab_names)
 
 # ==========================================
-# 탭 1: 상품 등록 (원재료 + 부자재 분리)
+# 탭 1: 상품 등록
 # ==========================================
 with tabs[0]:
     with st.expander("📍 신규 상품 영구 등록 (스마트 원가 계산기)", expanded=True):
@@ -209,11 +209,11 @@ with tabs[0]:
             target_m = c2.number_input("🎯 목표 마진", value=0.4, step=0.1)
             make_time = c3.number_input("⏱️ 제작 소요시간(분)", value=30, step=5)
             
-            st.write("🌿 **1. [원재료] 투입량 입력 (키친코스트 방식)**")
+            st.write("🌿 **1. [원재료] 투입량 입력**")
             bom_recipe_init = pd.DataFrame([{"항목": "백앙금", "총용량(g,ml)": 5000, "총가격(원)": 15000, "레시피 투입량(g,ml)": 300}])
             bom_recipe = st.data_editor(bom_recipe_init, num_rows="dynamic", use_container_width=True, key="bom_r")
             
-            st.write("🎀 **2. [부자재] 단품 입력 (포장지, 상자 등)**")
+            st.write("🎀 **2. [부자재] 단품 입력**")
             bom_sub_init = pd.DataFrame([{"항목": "화과자 6구 케이스", "수량(개)": 1, "단가(원)": 800}])
             bom_sub = st.data_editor(bom_sub_init, num_rows="dynamic", use_container_width=True, key="bom_s")
             
@@ -344,7 +344,10 @@ with tabs[2]:
     try: 
         st.divider()
         st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
-        st.image("청다움 멘트.png", use_container_width=True)
+        # 💡 [UI 수정] 이미지를 화면의 50% 크기로 중앙에 배치합니다.
+        c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
+        with c_img2:
+            st.image("청다움 멘트.png", use_container_width=True)
     except: pass
 
 # ==========================================
@@ -389,7 +392,7 @@ with tabs[3]:
     m[4].metric("✨ 통장 입금액 (찐수익)", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지 (매거진 + 비밀 창고)
+# 탭 5: 🎓 청다움 라운지
 # ==========================================
 with tabs[4]:
     st.markdown("### 📰 청다움 트렌드 매거진")
@@ -425,10 +428,9 @@ with tabs[4]:
                 else: st.warning("업체명과 링크를 입력해주세요.")
 
 # ==========================================
-# 탭 6: 🚀 창업 퀘스트 (8단계 도장깨기 & 생존 계산기)
+# 탭 6: 🚀 창업 퀘스트
 # ==========================================
 with tabs[5]:
-    # 💰 [중앙] 청다움 생존 계산기
     st.markdown("### 💰 청다움 생존 계산기 (초기 예산 검증기)")
     with st.container(border=True):
         budget = st.number_input("💵 1. 초기 예산 (가용 자금 총액)", value=0, step=1000000)
@@ -443,14 +445,11 @@ with tabs[5]:
         st.divider()
         st.metric("✨ 3. 최종 여유 자금 (비상금)", f"{fmt(reserve)}원")
         
-        if reserve < 0:
-            st.error("🚨 경고: 예산이 초과되었습니다! 무리한 대출이나 투자를 진행하기 전 다시 점검해 보세요!")
-        elif reserve > 0 and budget > 0:
-            st.success("✅ 안정적인 자금 흐름입니다! 오픈 후 버틸 수 있는 훌륭한 런웨이(Runway)를 확보하셨습니다.")
+        if reserve < 0: st.error("🚨 경고: 예산이 초과되었습니다! 무리한 투자를 진행하기 전 다시 점검해 보세요!")
+        elif reserve > 0 and budget > 0: st.success("✅ 안정적인 흐름입니다! 버틸 수 있는 런웨이(Runway)를 확보하셨습니다.")
             
     st.divider()
     
-    # 🚀 [상단] 8단계 퀘스트
     st.markdown("### 🚀 청다움 사관학교 8단계 퀘스트")
     user_quest = df_quest[df_quest['등록자'] == current_user]
     
@@ -468,28 +467,21 @@ with tabs[5]:
         
         with st.form("quest_form"):
             s1 = st.checkbox("1단계: 보건증(건강진단결과서) 발급 완료", value=bool(uq.get('step1', False)))
-            st.caption("💡 노하우: 신분증을 꼭 챙겨서 관할 보건소를 방문하세요! 검사 후 발급까지 약 5일(주말 제외)이 소요되니, 매장 계약 후 가장 먼저 움직이셔야 하는 1순위입니다.")
-            
+            st.caption("💡 노하우: 신분증을 챙겨 보건소 방문! 발급까지 5일 소요되니 매장 계약 후 1순위입니다.")
             s2 = st.checkbox("2단계: 식품위생교육 수료 완료", value=bool(uq.get('step2', False)))
-            st.caption("💡 노하우: 한국휴게음식업중앙회 등에서 온라인 이수 가능합니다. 나중에 구청에 제출해야 하니 수료증은 반드시 출력하거나 PDF로 저장해 두세요!")
-            
+            st.caption("💡 노하우: 한국휴게음식업중앙회에서 온라인 이수 가능. 수료증은 반드시 저장해 두세요!")
             s3 = st.checkbox("3단계: 영업신고증 발급 완료", value=bool(uq.get('step3', False)))
-            st.caption("💡 노하우: 가장 떨리는 순간입니다! 확정일자 받은 임대차계약서, 보건증, 위생교육수료증, 신분증을 모두 챙겨서 관할 구청 위생과를 방문하세요.")
-            
+            st.caption("💡 노하우: 확정일자 받은 임대차계약서, 보건증, 위생교육수료증, 신분증 챙겨 구청 위생과 방문.")
             s4 = st.checkbox("4단계: 사업자등록증 신청 및 사업자 통장 개설", value=bool(uq.get('step4', False)))
-            st.caption("💡 노하우: 사업자등록증이 나오면 그 길로 바로 은행에 가서 '사업자 전용 통장'과 카드를 만드세요! 모든 매입/매출은 이 통장 하나로만 관리하셔야 세금 신고 때 피눈물을 흘리지 않습니다.")
-            
+            st.caption("💡 노하우: 세무서 신청 후 은행 가서 전용 통장/카드 만들기! 모든 거래는 이 통장 하나로만 하세요.")
             s5 = st.checkbox("5단계: 필수 집기 세팅 및 인테리어 마감", value=bool(uq.get('step5', False)))
-            st.caption("💡 노하우: 화과자 제작에 필수적인 오븐과 찜기, 반죽기의 전력량(와트수)을 꼭 확인하시고, 사장님의 손목 피로도를 낮출 수 있는 최적의 작업 동선으로 가구를 배치하세요!")
-            
+            st.caption("💡 노하우: 오븐/찜기 등 전력량 확인 필수. 손목 피로도를 낮출 최적의 동선으로 배치하세요.")
             s6 = st.checkbox("6단계: 필요한 상품 재료 및 부자재 미리 확보", value=bool(uq.get('step6', False)))
-            st.caption("💡 노하우: 포장 상자, 스티커, 기본 앙금 등은 배송 기간이 은근히 깁니다. 미리 발주해 두시되, 첫 초도 물량은 절대 너무 많이 잡지 마시고 시장 반응을 보며 늘려가는 것이 핵심입니다!")
-            
+            st.caption("💡 노하우: 포장 상자, 스티커 등 배송 기간 고려하여 미리 발주하되 첫 초도 물량은 적게 잡으세요.")
             s7 = st.checkbox("7단계: 블로그, 인스타그램 등 SNS 계정 개설", value=bool(uq.get('step7', False)))
-            st.caption("💡 노하우: 완벽하게 세팅된 다음 올리려 하지 마세요! 텅 빈 매장에 페인트칠하는 모습, 화과자 빚는 연습 과정 등 매장 오픈과정을 기록하는 것도 큰 도움이 됩니다. 성장 스토리에 기꺼이 지갑을 엽니다!")
-            
+            st.caption("💡 노하우: 빈 매장 페인트칠하는 모습 등 오픈 과정 기록도 큰 도움! 스토리에 지갑을 엽니다.")
             s8 = st.checkbox("8단계: 통신판매업 신고 및 온라인 판매 채널 오픈", value=bool(uq.get('step8', False)))
-            st.caption("💡 노하우: 온라인 택배 판매를 하시려면 구청(또는 정부24)에서 '통신판매업 신고'가 필수입니다! (구매안전서비스 이용확인증 필요). 네이버 스마트스토어, 아이디어스 등은 입점 심사 기간이 있으니 오픈 전 미리 가입해 두세요.")
+            st.caption("💡 노하우: 택배 판매 시 통신판매업 신고 필수. 스토어 등은 입점 심사가 있으니 미리 가입해두세요.")
             
             if st.form_submit_button("✅ 퀘스트 진행 상황 영구 저장", use_container_width=True):
                 supabase.table("quest_db").update({
@@ -502,29 +494,42 @@ with tabs[5]:
     st.info("마스터가 공공데이터포털 API를 가동하면 여기에 지역별 지원금 목록이 표시됩니다.")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 (API 통제실 신설)
+# 탭 7: 👑 마스터 관리 (API 통제실 + 회원관리 복구)
 # ==========================================
 if is_master:
     with tabs[6]:
         st.subheader("👑 최고 관리자 대시보드 및 API 통제실")
         
-        # 🤖 [새로운 기능] 나외치 봇 API 가동실
+        # 💡 [기능 복구] 회원 관리 (강퇴/정지)
+        st.write("### 👥 청다움 회원 명부 관리")
+        st.dataframe(df_users, hide_index=True, use_container_width=True)
+        with st.form("user_manage_form"):
+            col_u1, col_u2 = st.columns(2)
+            target_user = col_u1.text_input("상태 변경/삭제할 아이디를 입력하세요")
+            action = col_u2.selectbox("작업 선택", ["정지 처리 (로그인 차단)", "정상 복구", "계정 영구 삭제"])
+            
+            if st.form_submit_button("🚀 실행"):
+                if target_user and target_user != MASTER_ID:
+                    if action == "정지 처리 (로그인 차단)":
+                        supabase.table("user_db").update({"상태": "정지"}).eq("아이디", target_user).execute()
+                    elif action == "정상 복구":
+                        supabase.table("user_db").update({"상태": "정상"}).eq("아이디", target_user).execute()
+                    elif action == "계정 영구 삭제":
+                        supabase.table("user_db").delete().eq("아이디", target_user).execute()
+                    st.cache_data.clear(); st.success(f"'{target_user}' 계정에 대한 [{action}] 완료!"); st.rerun()
+                elif target_user == MASTER_ID:
+                    st.error("대표님 본인(마스터) 계정은 건드릴 수 없습니다!")
+
+        st.divider()
         st.write("### 🤖 나외치 봇(Bot) 데이터 수집실")
         with st.expander("📡 외부 API 데이터 수동/자동 수집", expanded=True):
-            st.caption("사전작업 3번에서 입력하신 API 키를 사용하여 데이터를 긁어옵니다.")
             api_c1, api_c2 = st.columns(2)
-            
-            if api_c1.button("🎥 유튜브 최신 디저트 트렌드 긁어오기 (테스트)"):
-                if YOUTUBE_API_KEY != "여기에_유튜브_API키(AIza...)를_넣으세요":
-                    st.success("유튜브 API가 정상적으로 연결되었습니다! (다음 버전에 치유풍 변환 로직이 추가됩니다)")
-                else:
-                    st.error("코드 상단에 유튜브 API 키를 먼저 입력해주세요!")
-                    
-            if api_c2.button("🏢 전국 소상공인 지원금 공고 긁어오기 (테스트)"):
-                if PUBLIC_DATA_KEY != "여기에_공공데이터_일반인증키(Encoding)를_넣으세요":
-                    st.success("공공데이터 API가 정상적으로 연결되었습니다! (다음 버전에 화면 출력 로직이 추가됩니다)")
-                else:
-                    st.error("코드 상단에 공공데이터 API 키를 먼저 입력해주세요!")
+            if api_c1.button("🎥 유튜브 최신 트렌드 긁어오기 (테스트)"):
+                if YOUTUBE_API_KEY != "여기에_유튜브_API키(AIza...)를_넣으세요": st.success("유튜브 API 정상 연결!")
+                else: st.error("코드 상단에 유튜브 API 키를 먼저 입력해주세요!")
+            if api_c2.button("🏢 전국 소상공인 지원금 공고 (테스트)"):
+                if PUBLIC_DATA_KEY != "여기에_공공데이터_일반인증키(Encoding)를_넣으세요": st.success("공공데이터 API 정상 연결!")
+                else: st.error("코드 상단에 공공데이터 API 키를 입력해주세요!")
 
         st.divider()
         st.write("### 📰 매거진 수동 발행기 (나외치팀 전용)")
@@ -552,5 +557,4 @@ if is_master:
                 if c2.form_submit_button("❌ 영구 삭제", use_container_width=True):
                     supabase.table("link_db").delete().eq("id", target_id).execute()
                     st.cache_data.clear(); st.rerun()
-        else:
-            st.info("현재 대기 중인 제보가 없습니다.")
+        else: st.info("현재 대기 중인 제보가 없습니다.")
