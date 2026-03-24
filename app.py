@@ -5,7 +5,7 @@ import json
 from streamlit_gsheets import GSheetsConnection
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V27.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V28.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -36,9 +36,9 @@ with st.sidebar:
                     except: st.session_state['calc_val'] = "Error"
                 else: st.session_state['calc_val'] += key
                 st.rerun()
-    st.caption("청다움 디지털 본사 V27.0 | 카일 본부장 보고")
+    st.caption("청다움 디지털 본사 V28.0 | 카일 본부장 보고")
 
-st.title("🍡 청다움 경영 관리 시스템 V27.0")
+st.title("🍡 청다움 경영 관리 시스템 V28.0")
 
 if 'sales' not in st.session_state: st.session_state['sales'] = []
 if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
@@ -50,7 +50,7 @@ tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v27_reg_form"):
+    with st.form("v28_reg_form"):
         c1, c2 = st.columns([2, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -131,27 +131,24 @@ with tabs[1]:
         
         st.dataframe(disp_df, use_container_width=True)
         
-        # 합계 대시보드 (첨부2 스타일로 목표대비 표시 복원)
         st.divider()
         st.write("### 🏁 현재 경영 성과 합계")
         tot_rev = sales_df['총매출'].sum()
         tot_net = sales_df['순익'].sum()
         avg_margin = round((tot_net / tot_rev * 100), 1) if tot_rev > 0 else 0
         
-        # 목표 대비 달성액 계산 (Delta값)
         target_rev = st.session_state.targets['rev']
         target_net = st.session_state.targets['net']
         diff_rev = tot_rev - target_rev
         diff_net = tot_net - target_net
         
         col1, col2, col3 = st.columns(3)
-        # Delta 인자에 원화 포맷팅된 차액 전달 (Streamlit 표준 스타일)
         col1.metric("💰 총 매출액 합산", f"{fmt(tot_rev)}원", f"{fmt(diff_rev)}원")
         col2.metric("📈 영업 순이익 합산", f"{fmt(tot_net)}원", f"{fmt(diff_net)}원")
         col3.metric("평균 수익률", f"{avg_margin}%")
 
 # ==========================================
-# 탭 3: 성과 분석 (오타 수정 및 멘트 이미지 스타일링)
+# 탭 3: 성과 분석 (멘트 이미지 확대 및 제목 변경)
 # ==========================================
 with tabs[2]:
     st.subheader("🏆 상품별 성과 및 순위 분석")
@@ -162,28 +159,24 @@ with tabs[2]:
         
         c1, c2, c3, c4 = st.columns(4)
         
-        # 1. 매출 순위
         r_rev = grouped.sort_values(by="총매출", ascending=False)[["상품명", "총매출"]].head(3).reset_index(drop=True)
         r_rev.index = range(1, len(r_rev)+1)
         r_rev["총매출"] = r_rev["총매출"].apply(fmt)
         c1.markdown("📊 **주요 순위 (매출)**")
         c1.dataframe(r_rev, use_container_width=True)
         
-        # 2. 순수익 순위
         r_net = grouped.sort_values(by="순익", ascending=False)[["상품명", "순익"]].head(3).reset_index(drop=True)
         r_net.index = range(1, len(r_net)+1)
         r_net["순익"] = r_net["순익"].apply(fmt)
         c2.markdown("💰 **순수익 순위**")
         c2.dataframe(r_net, use_container_width=True)
         
-        # 3. 수익률 순위
         r_mar = grouped.sort_values(by="수익률", ascending=False)[["상품명", "수익률"]].head(3).reset_index(drop=True)
         r_mar.index = range(1, len(r_mar)+1)
         r_mar["수익률"] = r_mar["수익률"].astype(str) + "%"
         c3.markdown("📈 **수익률**")
         c3.dataframe(r_mar, use_container_width=True)
         
-        # 4. 판매순위
         r_qty = grouped.sort_values(by="수량", ascending=False)[["상품명", "수량"]].head(3).reset_index(drop=True)
         r_qty.index = range(1, len(r_qty)+1)
         c4.markdown("📦 **판매순위**")
@@ -192,13 +185,14 @@ with tabs[2]:
         st.info("판매 데이터를 추가하시면 순위가 표시됩니다.")
         
     st.divider()
-    # 청다움 멘트 이미지 스타일링 (중앙 배치, 크기 축소)
-    sc1, sc2, sc3 = st.columns([1, 2, 1])
+    # 청다움 멘트 이미지 스타일링 조정 (크기 확대, 제목 변경)
+    sc1, sc2, sc3 = st.columns([1, 4, 1]) # 이미지 폭 확대를 위해 컬럼 비율 조정 ([1,2,1] -> [1,4,1])
     with sc2:
-        st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 약속</h3>", unsafe_allow_html=True)
+        # 제목 변경: 약속 -> 조언
+        st.markdown("<h3 style='text-align: center; color: #4F8BF9;'>📣 청다움의 따뜻한 조언</h3>", unsafe_allow_html=True)
         try:
-            # width=400으로 줄여서 중앙 sc2 컬럼에 배치
-            st.image("청다움 멘트.png", width=400, caption="고객과 함께하는 따 치유")
+            # width=400 제거하고 use_container_width=True 사용 (sc2 컬럼 폭 전체를 채워 확대)
+            st.image("청다움 멘트.png", use_container_width=True, caption="고객과 함께하는 따뜻한 치유")
         except:
             st.caption("※ GitHub 창고에 '청다움 멘트.png' 파일을 업로드하시면 여기에 표시됩니다.")
 
@@ -234,5 +228,8 @@ with tabs[3]:
     m5.metric("✨ 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
     
     # 목표 달성 시 축하 풍선
-    if diff_net >= 0 and total_net > 0:
-        st.balloons()
+    try:
+        if diff_net >= 0 and total_net > 0:
+            st.balloons()
+    except:
+        pass
