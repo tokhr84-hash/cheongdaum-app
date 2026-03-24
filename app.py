@@ -11,7 +11,7 @@ MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
 MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V33.1", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V33.2", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -45,7 +45,7 @@ except Exception as e:
     st.error(f"메인 서버 연결 대기 중입니다. {e}")
     st.stop()
 
-# --- [3] 로그인 및 회원가입 로직 (시트 연동형) ---
+# --- [3] 로그인 및 회원가입 로직 (시트 연동형 + 마스터 프리패스) ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
@@ -64,17 +64,23 @@ if not st.session_state.logged_in:
             submit_login = st.form_submit_button("입장하기", use_container_width=True)
             
             if submit_login:
-                # 구글 시트(df_users)에서 일치하는 회원 찾기
-                match = df_users[(df_users["아이디"] == user_id) & (df_users["비밀번호"] == user_pw)]
-                if not match.empty:
-                    if match.iloc[0]["상태"] == "정상":
-                        st.session_state.logged_in = True
-                        st.session_state.current_user = user_id
-                        st.rerun()
-                    else:
-                        st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
+                # 👑 [긴급 마스터 프리패스]: 코드로 설정한 대표님 계정은 구글 시트 상태와 무관하게 100% 열립니다.
+                if user_id == MASTER_ID and user_pw == MASTER_PW:
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = user_id
+                    st.rerun()
                 else:
-                    st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
+                    # 일반 사장님들은 구글 시트(df_users)에서 일치하는지 확인
+                    match = df_users[(df_users["아이디"] == user_id) & (df_users["비밀번호"] == user_pw)]
+                    if not match.empty:
+                        if match.iloc[0]["상태"] == "정상":
+                            st.session_state.logged_in = True
+                            st.session_state.current_user = user_id
+                            st.rerun()
+                        else:
+                            st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
+                    else:
+                        st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
                     
     with sign_tab:
         with st.form("signup_form"):
@@ -84,7 +90,7 @@ if not st.session_state.logged_in:
             submit_signup = st.form_submit_button("가입하기", use_container_width=True)
             
             if submit_signup:
-                if new_id in df_users["아이디"].values:
+                if new_id in df_users["아이디"].values or new_id == MASTER_ID:
                     st.warning("이미 존재하는 아이디입니다.")
                 elif new_pw != new_pw_check:
                     st.warning("비밀번호가 일치하지 않습니다.")
