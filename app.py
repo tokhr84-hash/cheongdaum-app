@@ -5,13 +5,13 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
-# 👑 [0] 마스터(최고 관리자) 설정
+# 👑 [0] 마스터(최고 관리자) 고정 설정
 # ==========================================
-MASTER_ID = "cheongdaum"    # 대표님의 마스터 아이디
-MASTER_PW = "150328"        # 대표님의 마스터 비밀번호
+MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
+MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V32.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V33.1", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -22,19 +22,30 @@ def fmt(val):
 # --- [2] 구글 시트 메인 서버 연결 ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
+    
+    # [장부 1] 상품 마스터 로드 (기본 첫 번째 시트)
     df_master = conn.read(ttl=0)
     
+    # [장부 2] 회원 명부 로드 (user_db 시트 영구 저장용)
+    try:
+        df_users = conn.read(worksheet="user_db", ttl=0)
+        # 만약 시트가 비어있다면 마스터 계정 기본 생성
+        if df_users.empty:
+            df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
+            conn.update(worksheet="user_db", data=df_users)
+    except Exception:
+        # user_db 탭이 없거나 에러가 나면 새로 생성
+        df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
+        conn.update(worksheet="user_db", data=df_users)
+
+    # 과거 데이터 호환성 유지
     if not df_master.empty and '등록자' not in df_master.columns:
         df_master['등록자'] = MASTER_ID
 except Exception as e:
     st.error(f"메인 서버 연결 대기 중입니다. {e}")
     st.stop()
 
-# --- [3] 회원 및 세션 시스템 ---
-# 유저 DB 구조 고도화: {"아이디": {"pw": "비밀번호", "status": "정상/정지"}}
-if 'users_db' not in st.session_state:
-    st.session_state.users_db = {MASTER_ID: {"pw": MASTER_PW, "status": "정상"}}
-
+# --- [3] 로그인 및 회원가입 로직 (시트 연동형) ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
@@ -53,19 +64,17 @@ if not st.session_state.logged_in:
             submit_login = st.form_submit_button("입장하기", use_container_width=True)
             
             if submit_login:
-                if user_id in st.session_state.users_db:
-                    user_data = st.session_state.users_db[user_id]
-                    if user_data["pw"] == user_pw:
-                        if user_data["status"] == "정상":
-                            st.session_state.logged_in = True
-                            st.session_state.current_user = user_id
-                            st.rerun()
-                        else:
-                            st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
+                # 구글 시트(df_users)에서 일치하는 회원 찾기
+                match = df_users[(df_users["아이디"] == user_id) & (df_users["비밀번호"] == user_pw)]
+                if not match.empty:
+                    if match.iloc[0]["상태"] == "정상":
+                        st.session_state.logged_in = True
+                        st.session_state.current_user = user_id
+                        st.rerun()
                     else:
-                        st.error("비밀번호가 일치하지 않습니다.")
+                        st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
                 else:
-                    st.error("아이디가 존재하지 않습니다.")
+                    st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
                     
     with sign_tab:
         with st.form("signup_form"):
@@ -75,18 +84,21 @@ if not st.session_state.logged_in:
             submit_signup = st.form_submit_button("가입하기", use_container_width=True)
             
             if submit_signup:
-                if new_id in st.session_state.users_db:
+                if new_id in df_users["아이디"].values:
                     st.warning("이미 존재하는 아이디입니다.")
                 elif new_pw != new_pw_check:
                     st.warning("비밀번호가 일치하지 않습니다.")
                 elif len(new_id) < 2:
                     st.warning("아이디를 정확히 입력해 주세요.")
                 else:
-                    st.session_state.users_db[new_id] = {"pw": new_pw, "status": "정상"}
+                    # 새로운 회원을 구글 시트에 즉시 영구 저장
+                    new_user_df = pd.DataFrame([{"아이디": new_id, "비밀번호": new_pw, "상태": "정상"}])
+                    updated_users_df = pd.concat([df_users, new_user_df], ignore_index=True)
+                    conn.update(worksheet="user_db", data=updated_users_df)
                     st.success(f"가입 환영합니다! 이제 '{new_id}' 아이디로 로그인해 주세요.")
     st.stop()
 
-# --- [4] 데이터 필터링 ---
+# --- [4] 데이터 필터링 (칸막이) ---
 current_user = st.session_state.current_user
 if not df_master.empty and '등록자' in df_master.columns:
     df_p = df_master[df_master['등록자'] == current_user]
@@ -96,7 +108,7 @@ else:
 if 'sales' not in st.session_state: st.session_state['sales'] = []
 if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
-# --- [5] 사이드바 ---
+# --- [5] 사이드바 UI ---
 with st.sidebar:
     st.title(f"👋 {current_user} 사장님" if current_user != MASTER_ID else "👑 대표님(Master)")
     if st.button("로그아웃", use_container_width=True):
@@ -126,7 +138,7 @@ with st.sidebar:
 
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
-# 마스터 권한 탭 생성
+# 마스터 권한에 따른 탭 구성
 if current_user == MASTER_ID:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산", "👑 총괄 마스터 관리"])
 else:
@@ -137,7 +149,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v32_reg_form"):
+    with st.form("v33_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -159,7 +171,7 @@ with tabs[0]:
                 }])
                 updated_master_df = pd.concat([df_master, new_row], ignore_index=True)
                 conn.update(data=updated_master_df)
-                st.success(f"🎉 '{p_name}' 등록 완료! (내 계정에 귀속되었습니다)")
+                st.success(f"🎉 '{p_name}' 등록 완료! (내 계정에 안전하게 귀속되었습니다)")
                 st.rerun()
 
     st.divider()
@@ -335,7 +347,7 @@ with tabs[3]:
     m5.metric("✨ 최종 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 총괄 마스터 관리 (심판의 검 기능 포함)
+# 탭 5: 👑 총괄 마스터 관리
 # ==========================================
 if current_user == MASTER_ID:
     with tabs[4]:
@@ -343,33 +355,35 @@ if current_user == MASTER_ID:
         
         # 1. 회원 목록 및 상태 관리
         st.write("### 👥 회원 계정 관리")
-        user_list = list(st.session_state.users_db.keys())
-        # 마스터 계정은 관리에서 제외 (스스로를 정지/탈퇴시킬 수 없게)
+        user_list = df_users["아이디"].tolist()
         manage_list = [u for u in user_list if u != MASTER_ID]
         
         if manage_list:
             selected_user = st.selectbox("관리할 사장님 아이디를 선택하세요", manage_list)
-            u_data = st.session_state.users_db[selected_user]
+            u_row = df_users[df_users["아이디"] == selected_user].iloc[0]
             
             col1, col2, col3 = st.columns(3)
             col1.info(f"아이디: {selected_user}")
-            col2.info(f"현재 상태: {u_data['status']}")
+            col2.info(f"현재 상태: {u_row['상태']}")
             
             # 버튼 영역
             b1, b2, b3 = st.columns(3)
-            if u_data['status'] == "정상":
+            if u_row['상태'] == "정상":
                 if b1.button("🚫 계정 정지시키기", use_container_width=True):
-                    st.session_state.users_db[selected_user]["status"] = "정지"
+                    df_users.loc[df_users["아이디"] == selected_user, "상태"] = "정지"
+                    conn.update(worksheet="user_db", data=df_users)
                     st.warning(f"'{selected_user}' 계정이 정지되었습니다.")
                     st.rerun()
             else:
                 if b1.button("✅ 정지 해제하기", use_container_width=True):
-                    st.session_state.users_db[selected_user]["status"] = "정상"
-                    st.success(f"'{selected_user}' 계정이 정상으로 복구되었습니다.")
+                    df_users.loc[df_users["아이디"] == selected_user, "상태"] = "정상"
+                    conn.update(worksheet="user_db", data=df_users)
+                    st.success(f"'{selected_user}' 계정이 정상 복구되었습니다.")
                     st.rerun()
             
             if b2.button("🔥 강제 탈퇴 (영구 삭제)", use_container_width=True):
-                del st.session_state.users_db[selected_user]
+                df_users = df_users[df_users["아이디"] != selected_user]
+                conn.update(worksheet="user_db", data=df_users)
                 st.error(f"'{selected_user}' 계정이 영구 삭제되었습니다.")
                 st.rerun()
 
@@ -377,7 +391,7 @@ if current_user == MASTER_ID:
             st.info("관리할 신규 회원이 아직 없습니다.")
 
         st.divider()
-        st.write("### 🗄️ 플랫폼 데이터 전수 조사")
+        st.write("### 🗄️ 플랫폼 데이터 전수 조사 (전체 회원 상품 DB)")
         if not df_master.empty:
             disp_master = df_master.copy()
             for col in ["원가", "권장가", "공임비"]:
