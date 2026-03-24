@@ -11,7 +11,7 @@ MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
 MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V34.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V35.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -36,7 +36,7 @@ try:
     except Exception:
         df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
         
-    # [장부 3] 🆕 매출 기록부 로드 (sales_db 시트)
+    # [장부 3] 매출 기록부 로드 (sales_db 시트)
     try:
         df_sales = conn.read(worksheet="sales_db", ttl=15)
         if df_sales.empty:
@@ -70,7 +70,7 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>🍡 청다움 경영 관리 플랫폼</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: gray;'>전국의 디저트 사장님들을 위한 스마트 비서 (V34.0)</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>전국의 디저트 사장님들을 위한 스마트 비서</p>", unsafe_allow_html=True)
     st.divider()
     
     log_tab, sign_tab = st.tabs(["🔑 로그인", "📝 회원가입"])
@@ -131,23 +131,25 @@ if not st.session_state.logged_in:
                         st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
     st.stop()
 
-# --- [4] 개인별 칸막이 데이터 연동 (상품 & 매출) ---
+# --- [4] 개인별 칸막이 연동 및 월별 캘린더 세팅 ---
 current_user = st.session_state.current_user
 
-# 상품 목록 필터링
+# 1. 상품 목록 필터링
 if not df_master.empty and '등록자' in df_master.columns:
     df_p = df_master[df_master['등록자'] == current_user]
 else:
     df_p = pd.DataFrame()
 
-# 🆕 매출 기록 필터링 및 월별 분류
+# 2. 매출 기록 필터링 및 '월(Month)' 리스트 생성
 if not df_sales.empty and '등록자' in df_sales.columns:
     user_sales = df_sales[df_sales['등록자'] == current_user].copy()
     if not user_sales.empty:
-        # 날짜를 기준으로 'YYYY-MM' 형식의 '월' 컬럼 생성
         user_sales['월'] = pd.to_datetime(user_sales['날짜']).dt.strftime('%Y-%m')
-        # 최신 월이 가장 먼저 나오도록 정렬
         month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
+        # 이번 달이 목록에 없다면 강제로 추가
+        curr_m = datetime.now().strftime('%Y-%m')
+        if curr_m not in month_list:
+            month_list.insert(0, curr_m)
     else:
         month_list = [datetime.now().strftime('%Y-%m')]
 else:
@@ -193,8 +195,22 @@ with st.sidebar:
                     st.session_state['calc_val'] += key
                 st.rerun()
 
+# ==========================================
+# 🎯 글로벌 캘린더 (모든 탭을 제어하는 월 선택)
+# ==========================================
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
+c1, c2 = st.columns([3, 1])
+with c2:
+    selected_month = st.selectbox("📅 장부 조회 월(Month)", month_list)
+
+# 선택된 월의 데이터만 추출 (탭 2, 3, 4에서 공통으로 사용됩니다)
+if not user_sales.empty:
+    monthly_sales = user_sales[user_sales['월'] == selected_month].copy()
+else:
+    monthly_sales = pd.DataFrame()
+
+# 마스터 권한 탭
 if current_user == MASTER_ID:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산", "👑 총괄 마스터 관리"])
 else:
@@ -205,7 +221,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v34_reg_form"):
+    with st.form("v35_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -258,31 +274,17 @@ with tabs[0]:
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적 (영구 DB 및 월별 조회 연동)
+# 탭 2: 월간 매출 실적 (정밀 타겟 삭제 추가)
 # ==========================================
 with tabs[1]:
-    st.subheader("📅 조회할 월(Month) 선택")
-    selected_month = st.selectbox("과거 장부를 보려면 월을 변경하세요", month_list)
-    
-    # 선택된 월의 데이터만 필터링
-    if not user_sales.empty:
-        monthly_sales = user_sales[user_sales['월'] == selected_month].copy()
-    else:
-        monthly_sales = pd.DataFrame()
-        
-    st.divider()
-    
-    # ------------------ 목표 설정 ------------------
     with st.expander(f"🚩 {selected_month}월 목표 설정", expanded=True):
         t1, t2 = st.columns(2)
         st.session_state.targets['rev'] = t1.number_input("목표 총 매출액", value=st.session_state.targets['rev'], step=1000000)
         st.session_state.targets['net'] = t2.number_input("목표 영업 순수익", value=st.session_state.targets['net'], step=1000000)
         
-    # ------------------ 실적 입력 ------------------
     st.subheader(f"📝 {selected_month}월 판매 데이터 추가")
     if not df_p.empty:
         c1, c2, c3 = st.columns([1, 1, 2])
-        # 기본 날짜를 선택한 월에 맞추어 주면 더 편리합니다.
         sale_date = c1.date_input("판매 날짜", datetime.now())
         inbound = c2.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
         sel = c3.selectbox("상품 선택", df_p["상품명"].tolist(), key="sale_p_sel")
@@ -312,27 +314,35 @@ with tabs[1]:
             try:
                 conn.update(worksheet="sales_db", data=updated_sales_df)
                 st.cache_data.clear()
-                st.success("✅ 안전하게 장부에 기록되었습니다!")
+                st.success("✅ 장부에 기록되었습니다!")
                 st.rerun()
             except Exception:
-                st.error("서버 대기 중입니다. 잠시 후 시도해주세요.")
+                st.error("서버 오류입니다. 잠시 후 시도해주세요.")
                 
-    # ------------------ 실적 표시 ------------------
     if not monthly_sales.empty:
         st.divider()
-        c1, c2 = st.columns([4, 1])
-        c1.write(f"### 📑 {selected_month}월 상세 판매현황")
+        st.write(f"### 📑 {selected_month}월 상세 판매현황")
         
-        # 🗑️ 삭제 기능 로직 업데이트 (해당 월의 마지막 데이터 삭제)
-        if c2.button("🗑️ 최근 1건 취소", use_container_width=True):
-            last_idx = monthly_sales.index[-1] # 원본 df_sales에서의 고유 인덱스
-            updated_sales_df = df_sales.drop(last_idx)
-            conn.update(worksheet="sales_db", data=updated_sales_df)
-            st.cache_data.clear()
-            st.rerun()
+        # 🗑️ [핵심 업데이트] 콕 집어서 삭제하는 기능
+        with st.expander("🗑️ 입력 오류 삭제 (원하는 항목만 선택 삭제)", expanded=False):
+            del_options = {}
+            for idx, row in monthly_sales.iterrows():
+                # 목록에 날짜, 상품, 수량, 금액을 명확히 보여줍니다.
+                display_text = f"[{row['날짜']}] {row['상품명']} - {row['수량']}개 (총매출: {fmt(row['총매출'])}원)"
+                del_options[display_text] = idx
+                
+            sel_del_str = st.selectbox("삭제할 판매 기록을 정확히 선택하세요", list(del_options.keys()))
             
+            if st.button("❌ 선택한 기록 완전 삭제", use_container_width=True):
+                target_idx = del_options[sel_del_str] # 구글 시트 원본의 고유 번호를 찾습니다.
+                updated_sales_df = df_sales.drop(target_idx) # 원본 장부에서 해당 줄만 뽑아냅니다.
+                conn.update(worksheet="sales_db", data=updated_sales_df)
+                st.cache_data.clear()
+                st.warning("선택하신 기록이 삭제되었습니다.")
+                st.rerun()
+
+        # 데이터 표시
         disp_sales = monthly_sales.copy()
-        # 보여주기용 변환
         for col in ["판매가", "총매출", "순익"]:
             disp_sales[col] = pd.to_numeric(disp_sales[col], errors='coerce').fillna(0)
             
@@ -341,7 +351,6 @@ with tabs[1]:
             disp_sales[col] = disp_sales[col].apply(lambda x: f"{fmt(x)}원")
         disp_sales['수량'] = disp_sales['수량'].apply(lambda x: f"{x}개")
         
-        # 필요 없는 컬럼 가리기
         st.dataframe(disp_sales.drop(columns=['등록자', '월'], errors='ignore'), use_container_width=True)
         
         tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
@@ -355,12 +364,11 @@ with tabs[1]:
         st.info(f"선택하신 {selected_month}월의 판매 기록이 없습니다.")
 
 # ==========================================
-# 탭 3: 성과 분석 (월별 데이터 연동)
+# 탭 3: 성과 분석 (선택된 월별 데이터 자동 연동)
 # ==========================================
 with tabs[2]:
     st.subheader(f"🏆 {selected_month}월 상품별 성과 분석")
     if not monthly_sales.empty:
-        # 숫자형 변환 (에러 방지)
         anal_sales = monthly_sales.copy()
         for col in ["수량", "총매출", "순익"]:
             anal_sales[col] = pd.to_numeric(anal_sales[col], errors='coerce').fillna(0)
@@ -407,12 +415,12 @@ with tabs[2]:
         pass
 
 # ==========================================
-# 탭 4: 최종 경영 결산 (월별 데이터 연동)
+# 탭 4: 최종 경영 결산 (선택된 월별 데이터 자동 연동)
 # ==========================================
 with tabs[3]:
     st.subheader(f"🏭 {selected_month}월 최종 경영 결산")
     
-    with st.expander("💸 이번 달 외부 입력 (세금 포함)", expanded=True):
+    with st.expander(f"💸 {selected_month}월 외부 지출 입력 (세금 포함)", expanded=True):
         c1, c2, c3, c4, c5 = st.columns(5)
         rent = c1.number_input("월세", value=0, step=10000)
         labor = c2.number_input("추가 인건비 (알바 등)", value=0, step=10000)
@@ -433,7 +441,7 @@ with tabs[3]:
     final_cash = tn - total_expenses
     
     st.divider()
-    st.write("### 🏁 최종 경영 결산 대시보드")
+    st.write(f"### 🏁 {selected_month}월 결산 대시보드")
     m1, m2, m3, m4, m5 = st.columns(5)
     
     m1.metric("🎯 목표 (매출기준)", f"{fmt(st.session_state.targets['rev'])}원")
