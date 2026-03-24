@@ -11,7 +11,7 @@ MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
 MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V33.5", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V33.6", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -36,16 +36,18 @@ try:
     except Exception:
         df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
 
-    # 🛠️ [핵심 해결책] 구글 시트의 숫자형 데이터를 무조건 문자(Text)형으로 강제 변환
+    # 🛠️ [핵심 해결책: 소수점 유령 박멸] 
+    # 구글 시트에서 넘어오는 데이터의 소수점(.0)과 빈칸을 완전히 제거합니다.
     if not df_users.empty:
-        df_users["아이디"] = df_users["아이디"].astype(str)
-        df_users["비밀번호"] = df_users["비밀번호"].astype(str)
+        df_users.fillna("", inplace=True)
+        df_users["아이디"] = df_users["아이디"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        df_users["비밀번호"] = df_users["비밀번호"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
     if not df_master.empty and '등록자' not in df_master.columns:
         df_master['등록자'] = MASTER_ID
         
     if not df_master.empty and '등록자' in df_master.columns:
-        df_master['등록자'] = df_master['등록자'].astype(str)
+        df_master['등록자'] = df_master['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
 except Exception as e:
     st.error("🚦 현재 구글 서버에 접속자가 많아 대기 중입니다. 약 15초 후 새로고침(F5) 해주세요.")
@@ -70,8 +72,9 @@ if not st.session_state.logged_in:
             submit_login = st.form_submit_button("입장하기", use_container_width=True)
             
             if submit_login:
-                user_id_str = str(user_id)
-                user_pw_str = str(user_pw)
+                # 입력된 아이디/비밀번호도 공백 제거
+                user_id_str = str(user_id).strip()
+                user_pw_str = str(user_pw).strip()
                 
                 # 👑 무적의 마스터 프리패스
                 if user_id_str == MASTER_ID and user_pw_str == MASTER_PW:
@@ -79,7 +82,7 @@ if not st.session_state.logged_in:
                     st.session_state.current_user = user_id_str
                     st.rerun()
                 else:
-                    # 일반 회원 검증 (문자 vs 문자 비교)
+                    # 일반 회원 검증 (완벽히 정제된 문자열끼리 비교)
                     match = df_users[(df_users["아이디"] == user_id_str) & (df_users["비밀번호"] == user_pw_str)]
                     if not match.empty:
                         if match.iloc[0]["상태"] == "정상":
@@ -99,12 +102,12 @@ if not st.session_state.logged_in:
             submit_signup = st.form_submit_button("가입하기", use_container_width=True)
             
             if submit_signup:
-                new_id_str = str(new_id)
-                new_pw_str = str(new_pw)
+                new_id_str = str(new_id).strip()
+                new_pw_str = str(new_pw).strip()
                 
                 if new_id_str in df_users["아이디"].values or new_id_str == MASTER_ID:
                     st.warning("이미 존재하는 아이디입니다.")
-                elif new_pw_str != str(new_pw_check):
+                elif new_pw_str != str(new_pw_check).strip():
                     st.warning("비밀번호가 일치하지 않습니다.")
                 elif len(new_id_str) < 2:
                     st.warning("아이디를 2자 이상 입력해 주세요.")
@@ -113,8 +116,9 @@ if not st.session_state.logged_in:
                     updated_users_df = pd.concat([df_users, new_user_df], ignore_index=True)
                     try:
                         conn.update(worksheet="user_db", data=updated_users_df)
-                        # 가입 즉시 캐시를 비워 바로 로그인할 수 있도록 강제 새로고침 효과
+                        # 가입 즉시 캐시를 비워 바로 로그인할 수 있도록 강제 새로고침
                         st.cache_data.clear()
+                        st.cache_resource.clear()
                         st.success(f"가입 완료! 이제 '{new_id_str}'로 로그인해 주세요.")
                     except Exception:
                         st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
@@ -183,7 +187,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v33_5_reg_form"):
+    with st.form("v33_6_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -211,7 +215,7 @@ with tabs[0]:
                 updated_master_df = pd.concat([df_master, new_row], ignore_index=True)
                 try:
                     conn.update(data=updated_master_df)
-                    st.cache_data.clear() # 데이터 업데이트 후 캐시 비우기
+                    st.cache_data.clear()
                     st.success(f"🎉 '{p_name}' 저장 완료!")
                     st.rerun()
                 except Exception:
