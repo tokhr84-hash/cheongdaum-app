@@ -5,13 +5,30 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
-# 👑 [0] 마스터(최고 관리자) 설정 
+# 👑 [0] 마스터(최고 관리자) 고정 설정 
 # ==========================================
-MASTER_ID = "master"    # 대표님 원하시는 아이디로 수정 가능
-MASTER_PW = "150328"        # 대표님 원하시는 비밀번호로 수정 가능
+MASTER_ID = "[청다움]"
+MASTER_PW = "150328"
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V36.2", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V37.0", page_icon="🍡", layout="wide")
+
+# 🛠️ [핵심 추가] 스트림릿 기본 UI(로고, 메뉴, 앱 관리 버튼) 완벽 숨기기
+hide_streamlit_style = """
+<style>
+/* 상단 메인 메뉴 숨기기 */
+#MainMenu {visibility: hidden;}
+/* 하단 Made with Streamlit 숨기기 */
+footer {visibility: hidden;}
+/* 상단 헤더(GitHub 아이콘, Deploy 버튼 등) 숨기기 */
+header {visibility: hidden;}
+[data-testid="stToolbar"] {visibility: hidden !important;}
+/* 우측 하단 '앱 관리(Manage app)' 뱃지 숨기기 */
+.viewerBadge_container__1QSob {display: none !important;}
+.viewerBadge_link__1S137 {display: none !important;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 def fmt(val): 
     try:
@@ -25,10 +42,8 @@ def fmt(val):
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # [장부 1] 상품 마스터
     df_master = conn.read(ttl=15)
     
-    # [장부 2] 회원 명부
     try:
         df_users = conn.read(worksheet="user_db", ttl=15)
         if df_users.empty:
@@ -36,7 +51,6 @@ try:
     except Exception:
         df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
         
-    # [장부 3] 매출 기록부
     try:
         df_sales = conn.read(worksheet="sales_db", ttl=15)
         if df_sales.empty:
@@ -44,7 +58,6 @@ try:
     except Exception:
         df_sales = pd.DataFrame(columns=["등록자", "날짜", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
 
-    # [장부 4] 월별 지출 기록부
     try:
         df_expenses = conn.read(worksheet="expense_db", ttl=15)
         if df_expenses.empty:
@@ -52,7 +65,6 @@ try:
     except Exception:
         df_expenses = pd.DataFrame(columns=["등록자", "월", "월세", "추가인건비", "공과금", "세금", "기타비용"])
 
-    # 데이터 정제 (소수점 유령 및 공백 제거)
     if not df_users.empty:
         df_users.fillna("", inplace=True)
         df_users["아이디"] = df_users["아이디"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
@@ -88,7 +100,6 @@ if not st.session_state.logged_in:
                 u_id_str = str(user_id).strip()
                 u_pw_str = str(user_pw).strip()
                 
-                # 👑 무적의 마스터 프리패스
                 if u_id_str == MASTER_ID and u_pw_str == MASTER_PW:
                     st.session_state.logged_in = True
                     st.session_state.current_user = u_id_str
@@ -133,23 +144,22 @@ if not st.session_state.logged_in:
                         st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
     st.stop()
 
-# --- [4] 개인별 칸막이 연동 (데이터 계승 로직 포함) ---
+# --- [4] 개인별 칸막이 연동 ---
 current_user = st.session_state.current_user
 is_master = (current_user == MASTER_ID)
+legacy_ids = ["cheongdaum", "[cheongdaum]"]
 
-# 1. 상품 필터링
 if not df_master.empty:
     if is_master:
-        df_p = df_master[(df_master['등록자'] == current_user) | (df_master['등록자'] == "cheongdaum")]
+        df_p = df_master[(df_master['등록자'] == current_user) | (df_master['등록자'].isin(legacy_ids))]
     else:
         df_p = df_master[df_master['등록자'] == current_user]
 else:
     df_p = pd.DataFrame()
 
-# 2. 매출 필터링 및 월별 리스트 생성
 if not df_sales.empty:
     if is_master:
-        user_sales = df_sales[(df_sales['등록자'] == current_user) | (df_sales['등록자'] == "cheongdaum")].copy()
+        user_sales = df_sales[(df_sales['등록자'] == current_user) | (df_sales['등록자'].isin(legacy_ids))].copy()
     else:
         user_sales = df_sales[df_sales['등록자'] == current_user].copy()
         
@@ -165,10 +175,9 @@ else:
     user_sales = pd.DataFrame()
     month_list = [datetime.now().strftime('%Y-%m')]
 
-# 3. 지출 필터링
 if not df_expenses.empty:
     if is_master:
-        user_expenses = df_expenses[(df_expenses['등록자'] == current_user) | (df_expenses['등록자'] == "cheongdaum")].copy()
+        user_expenses = df_expenses[(df_expenses['등록자'] == current_user) | (df_expenses['등록자'].isin(legacy_ids))].copy()
     else:
         user_expenses = df_expenses[df_expenses['등록자'] == current_user].copy()
 else:
@@ -192,8 +201,10 @@ with st.sidebar:
     
     st.divider()
     st.title("🧮 계산기")
+    
     if 'calc_val' not in st.session_state: 
         st.session_state['calc_val'] = ""
+        
     st.code(st.session_state['calc_val'] if st.session_state['calc_val'] else "0", language="text")
     
     for row in [['7', '8', '9', '/'], ['4', '5', '6', '*'], ['1', '2', '3', '-'], ['C', '0', '=', '+']]:
@@ -211,31 +222,29 @@ with st.sidebar:
                     st.session_state['calc_val'] += key
                 st.rerun()
 
-# --- [6] 메인 화면 및 캘린더 세팅 ---
+# --- [6] 메인 화면 ---
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
 c1, c2 = st.columns([3, 1])
 with c2: 
     selected_month = st.selectbox("📅 장부 조회 월(Month)", month_list)
 
-# 선택된 월별 데이터 추출
 if not user_sales.empty:
     monthly_sales = user_sales[user_sales['월'] == selected_month] 
 else:
     monthly_sales = pd.DataFrame()
 
-# 권한에 따른 탭 구성
 if is_master:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산", "👑 총괄 마스터 관리"])
 else:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산"])
 
 # ==========================================
-# 탭 1: 상품 정보 등록
+# 탭 1: 상품 등록
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v36_2_reg_form"):
+    with st.form("v37_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진", value=0.4, step=0.1)
@@ -275,7 +284,7 @@ with tabs[0]:
         del_p = st.selectbox("삭제할 상품", df_p["상품명"].dropna().tolist())
         
         if st.button("❌ 선택 상품 삭제", use_container_width=True):
-            condition = (df_master['등록자'].isin([current_user, "cheongdaum"])) & (df_master['상품명'] == del_p)
+            condition = (df_master['등록자'].isin([current_user] + legacy_ids)) & (df_master['상품명'] == del_p)
             updated_master_df = df_master[~condition]
             conn.update(data=updated_master_df)
             st.cache_data.clear()
@@ -289,7 +298,7 @@ with tabs[0]:
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적
+# 탭 2: 매출 실적
 # ==========================================
 with tabs[1]:
     with st.expander(f"🚩 {selected_month}월 목표 설정", expanded=True):
@@ -370,8 +379,6 @@ with tabs[1]:
         col1, col2 = st.columns(2)
         col1.metric("💰 총 매출액", f"{fmt(tr)}원", f"{fmt(tr - st.session_state.targets['rev'])}원")
         col2.metric("📈 영업 순이익", f"{fmt(tn)}원", f"{fmt(tn - st.session_state.targets['net'])}원")
-    else:
-        st.info(f"선택하신 {selected_month}월의 기록이 없습니다.")
 
 # ==========================================
 # 탭 3: 성과 분석
@@ -438,7 +445,7 @@ with tabs[3]:
             e = c5.number_input("기타", value=int(v['기타비용']), step=10000)
             
             if st.form_submit_button("💾 이 달의 고정 지출 영구 저장", use_container_width=True):
-                condition = (df_expenses['등록자'].isin([current_user, "cheongdaum"])) & (df_expenses['월'] == selected_month)
+                condition = (df_expenses['등록자'].isin([current_user] + legacy_ids)) & (df_expenses['월'] == selected_month)
                 ue = df_expenses[~condition]
                 
                 ne = pd.DataFrame([{
@@ -488,7 +495,6 @@ if is_master:
     with tabs[4]:
         st.subheader("👑 플랫폼 사법 관리 대시보드")
         
-        # 1. 회원 관리
         st.write("### 👥 회원 계정 관리")
         try:
             user_list = df_users["아이디"].tolist()
