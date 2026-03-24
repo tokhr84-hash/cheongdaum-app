@@ -11,7 +11,7 @@ MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
 MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V33.4", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V33.5", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -22,26 +22,30 @@ def fmt(val):
         return str(val)
 
 # --- [2] 구글 시트 메인 서버 연결 ---
-# 💡 서버 과부하(429 에러) 방지를 위해 ttl=15 (15초 캐시)를 적용합니다.
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     # [장부 1] 상품 마스터 로드
     df_master = conn.read(ttl=15)
     
-    # [장부 2] 회원 명부 로드 (user_db 시트)
+    # [장부 2] 회원 명부 로드
     try:
         df_users = conn.read(worksheet="user_db", ttl=15)
-        # 시트가 비어있을 경우 마스터 계정 기본 할당
         if df_users.empty:
             df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
     except Exception:
-        # 429 에러 등으로 시트를 못 읽을 경우, 앱이 꺼지지 않도록 임시 메모리 장부 생성
         df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
 
-    # 과거 상품 데이터에 등록자 꼬리표가 없으면 마스터 아이디로 부여
+    # 🛠️ [핵심 해결책] 구글 시트의 숫자형 데이터를 무조건 문자(Text)형으로 강제 변환
+    if not df_users.empty:
+        df_users["아이디"] = df_users["아이디"].astype(str)
+        df_users["비밀번호"] = df_users["비밀번호"].astype(str)
+
     if not df_master.empty and '등록자' not in df_master.columns:
         df_master['등록자'] = MASTER_ID
+        
+    if not df_master.empty and '등록자' in df_master.columns:
+        df_master['등록자'] = df_master['등록자'].astype(str)
 
 except Exception as e:
     st.error("🚦 현재 구글 서버에 접속자가 많아 대기 중입니다. 약 15초 후 새로고침(F5) 해주세요.")
@@ -66,23 +70,26 @@ if not st.session_state.logged_in:
             submit_login = st.form_submit_button("입장하기", use_container_width=True)
             
             if submit_login:
-                # 👑 무적의 마스터 프리패스 (시트 에러와 무관하게 무조건 통과)
-                if user_id == MASTER_ID and user_pw == MASTER_PW:
+                user_id_str = str(user_id)
+                user_pw_str = str(user_pw)
+                
+                # 👑 무적의 마스터 프리패스
+                if user_id_str == MASTER_ID and user_pw_str == MASTER_PW:
                     st.session_state.logged_in = True
-                    st.session_state.current_user = user_id
+                    st.session_state.current_user = user_id_str
                     st.rerun()
                 else:
-                    # 일반 회원 검증
-                    match = df_users[(df_users["아이디"] == user_id) & (df_users["비밀번호"] == user_pw)]
+                    # 일반 회원 검증 (문자 vs 문자 비교)
+                    match = df_users[(df_users["아이디"] == user_id_str) & (df_users["비밀번호"] == user_pw_str)]
                     if not match.empty:
                         if match.iloc[0]["상태"] == "정상":
                             st.session_state.logged_in = True
-                            st.session_state.current_user = user_id
+                            st.session_state.current_user = user_id_str
                             st.rerun()
                         else:
                             st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
                     else:
-                        st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
+                        st.error("아이디 또는 비밀번호가 일치하지 않습니다. (가입 직후라면 15초 뒤에 다시 시도해 주세요!)")
                     
     with sign_tab:
         with st.form("signup_form"):
@@ -92,18 +99,23 @@ if not st.session_state.logged_in:
             submit_signup = st.form_submit_button("가입하기", use_container_width=True)
             
             if submit_signup:
-                if new_id in df_users["아이디"].values or new_id == MASTER_ID:
+                new_id_str = str(new_id)
+                new_pw_str = str(new_pw)
+                
+                if new_id_str in df_users["아이디"].values or new_id_str == MASTER_ID:
                     st.warning("이미 존재하는 아이디입니다.")
-                elif new_pw != new_pw_check:
+                elif new_pw_str != str(new_pw_check):
                     st.warning("비밀번호가 일치하지 않습니다.")
-                elif len(new_id) < 2:
+                elif len(new_id_str) < 2:
                     st.warning("아이디를 2자 이상 입력해 주세요.")
                 else:
-                    new_user_df = pd.DataFrame([{"아이디": new_id, "비밀번호": new_pw, "상태": "정상"}])
+                    new_user_df = pd.DataFrame([{"아이디": new_id_str, "비밀번호": new_pw_str, "상태": "정상"}])
                     updated_users_df = pd.concat([df_users, new_user_df], ignore_index=True)
                     try:
                         conn.update(worksheet="user_db", data=updated_users_df)
-                        st.success(f"가입 완료! 이제 '{new_id}'로 로그인해 주세요.")
+                        # 가입 즉시 캐시를 비워 바로 로그인할 수 있도록 강제 새로고침 효과
+                        st.cache_data.clear()
+                        st.success(f"가입 완료! 이제 '{new_id_str}'로 로그인해 주세요.")
                     except Exception:
                         st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
     st.stop()
@@ -171,7 +183,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v33_4_reg_form"):
+    with st.form("v33_5_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -199,6 +211,7 @@ with tabs[0]:
                 updated_master_df = pd.concat([df_master, new_row], ignore_index=True)
                 try:
                     conn.update(data=updated_master_df)
+                    st.cache_data.clear() # 데이터 업데이트 후 캐시 비우기
                     st.success(f"🎉 '{p_name}' 저장 완료!")
                     st.rerun()
                 except Exception:
@@ -213,6 +226,7 @@ with tabs[0]:
             condition = (df_master['등록자'] == current_user) & (df_master['상품명'] == del_target)
             updated_master_df = df_master[~condition]
             conn.update(data=updated_master_df)
+            st.cache_data.clear()
             st.rerun()
             
         disp = df_p.copy().drop(columns=['등록자'], errors='ignore') 
@@ -268,6 +282,9 @@ with tabs[1]:
         disp_df['수량'] = disp_df['수량'].apply(lambda x: f"{x}개")
         
         st.write("### 📑 상세 판매현황")
+        if c2.button("🗑️ 가장 최근 기록 1건 삭제", use_container_width=True):
+            st.session_state['sales'].pop()
+            st.rerun()
         st.dataframe(disp_df, use_container_width=True)
         
         tr = sales_df['총매출'].sum()
@@ -384,18 +401,21 @@ if current_user == MASTER_ID:
                     if b1.button("🚫 계정 정지시키기", use_container_width=True):
                         df_users.loc[df_users["아이디"] == selected_user, "상태"] = "정지"
                         conn.update(worksheet="user_db", data=df_users)
+                        st.cache_data.clear()
                         st.warning(f"'{selected_user}' 계정이 정지되었습니다.")
                         st.rerun()
                 else:
                     if b1.button("✅ 정지 해제하기", use_container_width=True):
                         df_users.loc[df_users["아이디"] == selected_user, "상태"] = "정상"
                         conn.update(worksheet="user_db", data=df_users)
+                        st.cache_data.clear()
                         st.success(f"'{selected_user}' 계정이 정상 복구되었습니다.")
                         st.rerun()
                 
                 if b2.button("🔥 강제 탈퇴 (영구 삭제)", use_container_width=True):
                     df_users = df_users[df_users["아이디"] != selected_user]
                     conn.update(worksheet="user_db", data=df_users)
+                    st.cache_data.clear()
                     st.error(f"'{selected_user}' 계정이 영구 삭제되었습니다.")
                     st.rerun()
             else:
