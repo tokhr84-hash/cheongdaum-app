@@ -5,7 +5,7 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V29.0", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V30.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -13,16 +13,95 @@ def fmt(val):
         return f"{int(float(str(val).replace(',', ''))):,}"
     except: return str(val)
 
-# --- [2] 구글 시트 연결 ---
+# --- [2] 구글 시트 메인 서버 연결 ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df_p = conn.read(ttl=0)
+    df_master = conn.read(ttl=0)
+    
+    # 과거 데이터(대표님 혼자 쓰던 시절)에 등록자 ID가 없다면 'admin'으로 일괄 부여 (에러 방지용)
+    if not df_master.empty and '등록자' not in df_master.columns:
+        df_master['등록자'] = 'admin'
 except Exception as e:
-    st.error(f"연결 대기 중입니다. {e}")
+    st.error(f"메인 서버 연결 대기 중입니다. {e}")
     st.stop()
 
-# --- [3] 사이드바: 계산기 및 기본 설정 ---
+# --- [3] 회원가입 및 로그인 시스템 ---
+# (※ 현재 회원명부는 테스트를 위해 앱 세션에 임시 저장됩니다. 추후 구글 시트로 영구 연동할 수 있습니다.)
+if 'users_db' not in st.session_state:
+    st.session_state.users_db = {"admin": "1234"} # 기본 관리자 계정
+
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.current_user = ""
+
+# 로그인 화면 UI
+if not st.session_state.logged_in:
+    st.markdown("<h1 style='text-align: center;'>🍡 청다움 경영 관리 플랫폼</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>전국의 디저트 사장님들을 위한 스마트 비서</p>", unsafe_allow_html=True)
+    st.divider()
+    
+    log_tab, sign_tab = st.tabs(["🔑 로그인", "📝 회원가입"])
+    
+    with log_tab:
+        with st.form("login_form"):
+            user_id = st.text_input("아이디(ID)", placeholder="admin")
+            user_pw = st.text_input("비밀번호(PW)", type="password")
+            submit_login = st.form_submit_button("입장하기", use_container_width=True)
+            
+            if submit_login:
+                if user_id in st.session_state.users_db and st.session_state.users_db[user_id] == user_pw:
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = user_id
+                    st.rerun()
+                else:
+                    st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
+                    
+    with sign_tab:
+        with st.form("signup_form"):
+            new_id = st.text_input("새로운 아이디(ID)")
+            new_pw = st.text_input("새로운 비밀번호(PW)", type="password")
+            new_pw_check = st.text_input("비밀번호 확인", type="password")
+            submit_signup = st.form_submit_button("가입하기", use_container_width=True)
+            
+            if submit_signup:
+                if new_id in st.session_state.users_db:
+                    st.warning("이미 존재하는 아이디입니다.")
+                elif new_pw != new_pw_check:
+                    st.warning("비밀번호가 일치하지 않습니다.")
+                elif len(new_id) < 2:
+                    st.warning("아이디를 정확히 입력해 주세요.")
+                else:
+                    st.session_state.users_db[new_id] = new_pw
+                    st.success(f"가입 환영합니다! 이제 '{new_id}' 아이디로 로그인해 주세요.")
+    st.stop() # 로그인하지 않으면 아래 메인 기능으로 넘어가지 못하게 막습니다.
+
+# --- [4] 개인별 데이터 필터링 (칸막이 기술) ---
+current_user = st.session_state.current_user
+if not df_master.empty and '등록자' in df_master.columns:
+    # 마스터 시트에서 현재 로그인한 사람의 데이터만 걸러서 df_p 에 담습니다.
+    df_p = df_master[df_master['등록자'] == current_user]
+else:
+    df_p = pd.DataFrame()
+
+# 각 유저별 세션 메모리 초기화
+if 'sales' not in st.session_state: st.session_state['sales'] = []
+if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
+
+# --- [5] 메인 시스템 UI (로그인 이후) ---
 with st.sidebar:
+    st.title(f"👋 {current_user} 사장님")
+    if st.button("로그아웃", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.current_user = ""
+        st.session_state['sales'] = [] # 로그아웃 시 매출 화면 초기화
+        st.rerun()
+        
+    st.divider()
+    st.subheader("⚙️ 개인 설정")
+    hourly_wage = st.number_input("나의 시간당 공임(원)", value=15000, step=1000)
+    st.caption("※ 인건비가 포함된 진짜 순수익 계산용")
+    
+    st.divider()
     st.title("🧮 계산기")
     if 'calc_val' not in st.session_state: st.session_state['calc_val'] = ""
     st.code(st.session_state['calc_val'] if st.session_state['calc_val'] else "0", language="text")
@@ -36,25 +115,17 @@ with st.sidebar:
                     except: st.session_state['calc_val'] = "Error"
                 else: st.session_state['calc_val'] += key
                 st.rerun()
-    
-    st.divider()
-    st.subheader("⚙️ 경영 설정")
-    hourly_wage = st.number_input("대표님 시간당 공임 (원)", value=15000, step=1000)
-    st.caption("※ 인건비가 포함된 진짜 순수익 계산에 사용됩니다.")
 
-st.title("🍡 청다움 경영 관리 시스템 V29.0 (전략 에디션)")
-
-if 'sales' not in st.session_state: st.session_state['sales'] = []
-if 'targets' not in st.session_state: st.session_state.targets = {'rev': 10000000, 'net': 4000000}
+st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
 tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산"])
 
 # ==========================================
-# 탭 1: 상품 정보 등록 (공임비 개념 추가)
+# 탭 1: 상품 정보 등록
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v29_reg_form"):
+    with st.form("v30_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -63,38 +134,45 @@ with tabs[0]:
         st.write("🌿 **[원재료등] 입력**") 
         bom = st.data_editor(pd.DataFrame([{"구분": "원재료", "항목": "기본재료", "수량": 1.0, "단가": 1000}]), num_rows="dynamic")
         
-        if st.form_submit_button("💾 구글 시트에 영구 저장"):
+        if st.form_submit_button("💾 중앙 서버에 영구 저장"):
             if p_name:
                 cost = float((bom["수량"] * bom["단가"]).sum())
                 labor_cost = (hourly_wage / 60) * make_time
                 price = float(np.round(cost / max(0.01, (1-target_m)), -1))
                 
-                new_row = pd.DataFrame([{"상품명": p_name, "원가": cost, "마진": target_m, "권장가": price, "소요시간": make_time, "공임비": labor_cost}])
-                updated_df = pd.concat([df_p, new_row], ignore_index=True)
-                conn.update(data=updated_df)
-                st.success(f"🎉 '{p_name}' 저장 완료! (공임비 {fmt(labor_cost)}원 반영)")
+                # 저장할 때 반드시 '등록자' 꼬리표를 달아서 저장합니다.
+                new_row = pd.DataFrame([{
+                    "상품명": p_name, "원가": cost, "마진": target_m, 
+                    "권장가": price, "소요시간": make_time, "공임비": labor_cost,
+                    "등록자": current_user
+                }])
+                updated_master_df = pd.concat([df_master, new_row], ignore_index=True)
+                conn.update(data=updated_master_df)
+                st.success(f"🎉 '{p_name}' 등록 완료! (내 계정에 안전하게 귀속되었습니다)")
                 st.rerun()
 
     st.divider()
     st.subheader("🗑️ 등록된 상품 삭제")
     if not df_p.empty and "상품명" in df_p.columns:
         del_target = st.selectbox("삭제할 상품을 선택하세요", df_p["상품명"].dropna().tolist())
-        if st.button("❌ 선택한 상품 구글 시트에서 완전 삭제"):
-            updated_df = df_p[df_p["상품명"] != del_target]
-            conn.update(data=updated_df)
+        if st.button("❌ 선택한 상품 완전 삭제"):
+            # 마스터 시트에서 해당 유저의 해당 상품만 정확히 삭제합니다.
+            condition = (df_master['등록자'] == current_user) & (df_master['상품명'] == del_target)
+            updated_master_df = df_master[~condition]
+            conn.update(data=updated_master_df)
             st.warning(f"'{del_target}' 상품이 삭제되었습니다.")
             st.rerun()
             
     st.divider()
     if not df_p.empty:
-        st.write("📋 현재 영구 저장된 상품 목록")
-        disp = df_p.copy()
+        st.write("📋 내 계정에 등록된 상품 목록")
+        disp = df_p.copy().drop(columns=['등록자'], errors='ignore') # 볼 때는 꼬리표를 숨겨서 깔끔하게 보여줍니다.
         for col in ["원가", "권장가", "공임비"]:
             if col in disp.columns: disp[col] = disp[col].apply(fmt)
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적 (날짜/채널 추가)
+# 탭 2: 월간 매출 실적 
 # ==========================================
 with tabs[1]:
     with st.expander("🚩 이번 달 목표 설정", expanded=True):
@@ -163,7 +241,7 @@ with tabs[1]:
         col3.metric("평균 수익률", f"{avg_margin}%")
 
 # ==========================================
-# 탭 3: 성과 분석 (4단 랭킹 + 유입경로 차트)
+# 탭 3: 성과 분석 
 # ==========================================
 with tabs[2]:
     st.subheader("🏆 상품별 성과 및 마케팅 분석")
@@ -216,7 +294,7 @@ with tabs[2]:
             st.caption("※ GitHub 창고에 '청다움 멘트.png' 파일을 업로드하시면 여기에 표시됩니다.")
 
 # ==========================================
-# 탭 4: 최종 경영 결산 (V28 로직 복원)
+# 탭 4: 최종 경영 결산
 # ==========================================
 with tabs[3]:
     st.subheader("🏭 최종 경영 결산")
