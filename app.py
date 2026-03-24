@@ -11,7 +11,7 @@ MASTER_ID = "cheongdaum"    # 대표님 고정 아이디
 MASTER_PW = "150328"        # 대표님 고정 비밀번호
 
 # --- [1] 시스템 설정 ---
-st.set_page_config(page_title="청다움 마스터 V33.6", page_icon="🍡", layout="wide")
+st.set_page_config(page_title="청다움 마스터 V34.0", page_icon="🍡", layout="wide")
 
 def fmt(val): 
     try:
@@ -21,23 +21,30 @@ def fmt(val):
     except: 
         return str(val)
 
-# --- [2] 구글 시트 메인 서버 연결 ---
+# --- [2] 구글 시트 메인 서버 3대 장부 연결 ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # [장부 1] 상품 마스터 로드
+    # [장부 1] 상품 마스터 로드 (기본 첫 번째 시트)
     df_master = conn.read(ttl=15)
     
-    # [장부 2] 회원 명부 로드
+    # [장부 2] 회원 명부 로드 (user_db 시트)
     try:
         df_users = conn.read(worksheet="user_db", ttl=15)
         if df_users.empty:
             df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
     except Exception:
         df_users = pd.DataFrame([{"아이디": MASTER_ID, "비밀번호": MASTER_PW, "상태": "정상"}])
+        
+    # [장부 3] 🆕 매출 기록부 로드 (sales_db 시트)
+    try:
+        df_sales = conn.read(worksheet="sales_db", ttl=15)
+        if df_sales.empty:
+            df_sales = pd.DataFrame(columns=["등록자", "날짜", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
+    except Exception:
+        df_sales = pd.DataFrame(columns=["등록자", "날짜", "경로", "상품명", "판매가", "수량", "총매출", "순익"])
 
-    # 🛠️ [핵심 해결책: 소수점 유령 박멸] 
-    # 구글 시트에서 넘어오는 데이터의 소수점(.0)과 빈칸을 완전히 제거합니다.
+    # 데이터 정제 (소수점 유령 및 공백 제거)
     if not df_users.empty:
         df_users.fillna("", inplace=True)
         df_users["아이디"] = df_users["아이디"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
@@ -48,6 +55,9 @@ try:
         
     if not df_master.empty and '등록자' in df_master.columns:
         df_master['등록자'] = df_master['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        
+    if not df_sales.empty and '등록자' in df_sales.columns:
+        df_sales['등록자'] = df_sales['등록자'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
 except Exception as e:
     st.error("🚦 현재 구글 서버에 접속자가 많아 대기 중입니다. 약 15초 후 새로고침(F5) 해주세요.")
@@ -60,7 +70,7 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>🍡 청다움 경영 관리 플랫폼</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: gray;'>전국의 디저트 사장님들을 위한 스마트 비서</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>전국의 디저트 사장님들을 위한 스마트 비서 (V34.0)</p>", unsafe_allow_html=True)
     st.divider()
     
     log_tab, sign_tab = st.tabs(["🔑 로그인", "📝 회원가입"])
@@ -72,7 +82,6 @@ if not st.session_state.logged_in:
             submit_login = st.form_submit_button("입장하기", use_container_width=True)
             
             if submit_login:
-                # 입력된 아이디/비밀번호도 공백 제거
                 user_id_str = str(user_id).strip()
                 user_pw_str = str(user_pw).strip()
                 
@@ -82,7 +91,6 @@ if not st.session_state.logged_in:
                     st.session_state.current_user = user_id_str
                     st.rerun()
                 else:
-                    # 일반 회원 검증 (완벽히 정제된 문자열끼리 비교)
                     match = df_users[(df_users["아이디"] == user_id_str) & (df_users["비밀번호"] == user_pw_str)]
                     if not match.empty:
                         if match.iloc[0]["상태"] == "정상":
@@ -92,7 +100,7 @@ if not st.session_state.logged_in:
                         else:
                             st.error("🚫 해당 계정은 관리자에 의해 활동이 정지되었습니다. 본사에 문의하세요.")
                     else:
-                        st.error("아이디 또는 비밀번호가 일치하지 않습니다. (가입 직후라면 15초 뒤에 다시 시도해 주세요!)")
+                        st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
                     
     with sign_tab:
         with st.form("signup_form"):
@@ -116,7 +124,6 @@ if not st.session_state.logged_in:
                     updated_users_df = pd.concat([df_users, new_user_df], ignore_index=True)
                     try:
                         conn.update(worksheet="user_db", data=updated_users_df)
-                        # 가입 즉시 캐시를 비워 바로 로그인할 수 있도록 강제 새로고침
                         st.cache_data.clear()
                         st.cache_resource.clear()
                         st.success(f"가입 완료! 이제 '{new_id_str}'로 로그인해 주세요.")
@@ -124,16 +131,29 @@ if not st.session_state.logged_in:
                         st.error("서버 과부하로 가입이 지연되었습니다. 잠시 후 다시 시도해 주세요.")
     st.stop()
 
-# --- [4] 데이터 필터링 (개인별 칸막이) ---
+# --- [4] 개인별 칸막이 데이터 연동 (상품 & 매출) ---
 current_user = st.session_state.current_user
 
+# 상품 목록 필터링
 if not df_master.empty and '등록자' in df_master.columns:
     df_p = df_master[df_master['등록자'] == current_user]
 else:
     df_p = pd.DataFrame()
 
-if 'sales' not in st.session_state: 
-    st.session_state['sales'] = []
+# 🆕 매출 기록 필터링 및 월별 분류
+if not df_sales.empty and '등록자' in df_sales.columns:
+    user_sales = df_sales[df_sales['등록자'] == current_user].copy()
+    if not user_sales.empty:
+        # 날짜를 기준으로 'YYYY-MM' 형식의 '월' 컬럼 생성
+        user_sales['월'] = pd.to_datetime(user_sales['날짜']).dt.strftime('%Y-%m')
+        # 최신 월이 가장 먼저 나오도록 정렬
+        month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
+    else:
+        month_list = [datetime.now().strftime('%Y-%m')]
+else:
+    user_sales = pd.DataFrame()
+    month_list = [datetime.now().strftime('%Y-%m')]
+
 if 'targets' not in st.session_state: 
     st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
@@ -144,7 +164,6 @@ with st.sidebar:
     if st.button("로그아웃", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.current_user = ""
-        st.session_state['sales'] = [] 
         st.rerun()
         
     st.divider()
@@ -176,7 +195,6 @@ with st.sidebar:
 
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
-# 마스터 탭 동적 구성
 if current_user == MASTER_ID:
     tabs = st.tabs(["📊 상품 정보 등록", "📈 월간 매출 실적", "🏆 성과 분석(Rank)", "🏭 최종 경영 결산", "👑 총괄 마스터 관리"])
 else:
@@ -187,7 +205,7 @@ else:
 # ==========================================
 with tabs[0]:
     st.subheader("📍 신규 상품 영구 등록")
-    with st.form("v33_6_reg_form"):
+    with st.form("v34_reg_form"):
         c1, c2, c3 = st.columns([2, 1, 1])
         p_name = c1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
         target_m = c2.number_input("🎯 목표 마진 (0.4 = 40%)", value=0.4, step=0.1)
@@ -240,17 +258,31 @@ with tabs[0]:
         st.dataframe(disp, use_container_width=True)
 
 # ==========================================
-# 탭 2: 월간 매출 실적 
+# 탭 2: 월간 매출 실적 (영구 DB 및 월별 조회 연동)
 # ==========================================
 with tabs[1]:
-    with st.expander("🚩 이번 달 목표 설정", expanded=True):
+    st.subheader("📅 조회할 월(Month) 선택")
+    selected_month = st.selectbox("과거 장부를 보려면 월을 변경하세요", month_list)
+    
+    # 선택된 월의 데이터만 필터링
+    if not user_sales.empty:
+        monthly_sales = user_sales[user_sales['월'] == selected_month].copy()
+    else:
+        monthly_sales = pd.DataFrame()
+        
+    st.divider()
+    
+    # ------------------ 목표 설정 ------------------
+    with st.expander(f"🚩 {selected_month}월 목표 설정", expanded=True):
         t1, t2 = st.columns(2)
         st.session_state.targets['rev'] = t1.number_input("목표 총 매출액", value=st.session_state.targets['rev'], step=1000000)
         st.session_state.targets['net'] = t2.number_input("목표 영업 순수익", value=st.session_state.targets['net'], step=1000000)
         
-    st.subheader("📅 판매 데이터 추가")
+    # ------------------ 실적 입력 ------------------
+    st.subheader(f"📝 {selected_month}월 판매 데이터 추가")
     if not df_p.empty:
         c1, c2, c3 = st.columns([1, 1, 2])
+        # 기본 날짜를 선택한 월에 맞추어 주면 더 편리합니다.
         sale_date = c1.date_input("판매 날짜", datetime.now())
         inbound = c2.selectbox("유입 경로", ["인스타그램", "네이버예약", "지인소개", "워크인", "기타"])
         sel = c3.selectbox("상품 선택", df_p["상품명"].tolist(), key="sale_p_sel")
@@ -261,10 +293,12 @@ with tabs[1]:
         ap = ca.number_input("실제 판매가", value=int(float(p_info["권장가"])))
         qty = cb.number_input("판매 수량", value=1, step=1)
         
-        if cc.button("목록에 추가", use_container_width=True):
+        if cc.button("영구 장부에 기록 추가", use_container_width=True):
             rev = float(ap) * qty
             pure_net = rev - (float(p_info["원가"]) * qty) - (float(p_info.get("공임비", 0)) * qty)
-            st.session_state['sales'].append({
+            
+            new_sale = pd.DataFrame([{
+                "등록자": current_user,
                 "날짜": sale_date.strftime("%Y-%m-%d"), 
                 "경로": inbound, 
                 "상품명": sel, 
@@ -272,48 +306,72 @@ with tabs[1]:
                 "수량": qty, 
                 "총매출": rev, 
                 "순익": pure_net
-            })
+            }])
+            
+            updated_sales_df = pd.concat([df_sales, new_sale], ignore_index=True)
+            try:
+                conn.update(worksheet="sales_db", data=updated_sales_df)
+                st.cache_data.clear()
+                st.success("✅ 안전하게 장부에 기록되었습니다!")
+                st.rerun()
+            except Exception:
+                st.error("서버 대기 중입니다. 잠시 후 시도해주세요.")
+                
+    # ------------------ 실적 표시 ------------------
+    if not monthly_sales.empty:
+        st.divider()
+        c1, c2 = st.columns([4, 1])
+        c1.write(f"### 📑 {selected_month}월 상세 판매현황")
+        
+        # 🗑️ 삭제 기능 로직 업데이트 (해당 월의 마지막 데이터 삭제)
+        if c2.button("🗑️ 최근 1건 취소", use_container_width=True):
+            last_idx = monthly_sales.index[-1] # 원본 df_sales에서의 고유 인덱스
+            updated_sales_df = df_sales.drop(last_idx)
+            conn.update(worksheet="sales_db", data=updated_sales_df)
+            st.cache_data.clear()
             st.rerun()
             
-    if st.session_state['sales']:
-        st.divider()
-        sales_df = pd.DataFrame(st.session_state['sales'])
-        
-        disp_df = sales_df.copy()
-        disp_df['수익률'] = (disp_df['순익'] / disp_df['총매출'] * 100).fillna(0).round(1).astype(str) + "%"
+        disp_sales = monthly_sales.copy()
+        # 보여주기용 변환
         for col in ["판매가", "총매출", "순익"]:
-            disp_df[col] = disp_df[col].apply(lambda x: f"{fmt(x)}원")
-        disp_df['수량'] = disp_df['수량'].apply(lambda x: f"{x}개")
+            disp_sales[col] = pd.to_numeric(disp_sales[col], errors='coerce').fillna(0)
+            
+        disp_sales['수익률'] = (disp_sales['순익'] / disp_sales['총매출'] * 100).fillna(0).round(1).astype(str) + "%"
+        for col in ["판매가", "총매출", "순익"]:
+            disp_sales[col] = disp_sales[col].apply(lambda x: f"{fmt(x)}원")
+        disp_sales['수량'] = disp_sales['수량'].apply(lambda x: f"{x}개")
         
-        st.write("### 📑 상세 판매현황")
-        if c2.button("🗑️ 가장 최근 기록 1건 삭제", use_container_width=True):
-            st.session_state['sales'].pop()
-            st.rerun()
-        st.dataframe(disp_df, use_container_width=True)
+        # 필요 없는 컬럼 가리기
+        st.dataframe(disp_sales.drop(columns=['등록자', '월'], errors='ignore'), use_container_width=True)
         
-        tr = sales_df['총매출'].sum()
-        tn = sales_df['순익'].sum()
+        tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
+        tn = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum()
         
         st.divider()
         col1, col2 = st.columns(2)
-        col1.metric("💰 총 매출액", f"{fmt(tr)}원", f"{fmt(tr - st.session_state.targets['rev'])}원")
-        col2.metric("📈 영업 순이익", f"{fmt(tn)}원", f"{fmt(tn - st.session_state.targets['net'])}원")
+        col1.metric(f"💰 {selected_month}월 총 매출액", f"{fmt(tr)}원", f"{fmt(tr - st.session_state.targets['rev'])}원")
+        col2.metric(f"📈 {selected_month}월 영업 순이익", f"{fmt(tn)}원", f"{fmt(tn - st.session_state.targets['net'])}원")
+    else:
+        st.info(f"선택하신 {selected_month}월의 판매 기록이 없습니다.")
 
 # ==========================================
-# 탭 3: 성과 분석 
+# 탭 3: 성과 분석 (월별 데이터 연동)
 # ==========================================
 with tabs[2]:
-    st.subheader("🏆 상품별 성과 및 순위 분석")
-    if st.session_state['sales']:
-        df_s = pd.DataFrame(st.session_state['sales'])
-        
-        st.markdown("##### 📍 유입 경로별 매출 현황")
-        channel_rank = df_s.groupby("경로")[["총매출"]].sum().sort_values(by="총매출", ascending=False)
+    st.subheader(f"🏆 {selected_month}월 상품별 성과 분석")
+    if not monthly_sales.empty:
+        # 숫자형 변환 (에러 방지)
+        anal_sales = monthly_sales.copy()
+        for col in ["수량", "총매출", "순익"]:
+            anal_sales[col] = pd.to_numeric(anal_sales[col], errors='coerce').fillna(0)
+            
+        st.markdown(f"##### 📍 {selected_month}월 유입 경로별 매출 현황")
+        channel_rank = anal_sales.groupby("경로")[["총매출"]].sum().sort_values(by="총매출", ascending=False)
         st.bar_chart(channel_rank)
         
         st.divider()
         
-        grouped = df_s.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
+        grouped = anal_sales.groupby("상품명")[["수량", "총매출", "순익"]].sum().reset_index()
         grouped["수익률"] = (grouped["순익"] / grouped["총매출"] * 100).fillna(0).round(1)
         
         c1, c2, c3, c4 = st.columns(4)
@@ -349,10 +407,10 @@ with tabs[2]:
         pass
 
 # ==========================================
-# 탭 4: 최종 경영 결산
+# 탭 4: 최종 경영 결산 (월별 데이터 연동)
 # ==========================================
 with tabs[3]:
-    st.subheader("🏭 최종 경영 결산")
+    st.subheader(f"🏭 {selected_month}월 최종 경영 결산")
     
     with st.expander("💸 이번 달 외부 입력 (세금 포함)", expanded=True):
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -365,17 +423,22 @@ with tabs[3]:
     total_expenses = rent + labor + tax + tax2 + etc
     st.write(f"**외부비용 합계:** {fmt(total_expenses)}원")
     
-    total_rev = sum(s['총매출'] for s in st.session_state['sales']) if st.session_state['sales'] else 0
-    total_net = sum(s['순익'] for s in st.session_state['sales']) if st.session_state['sales'] else 0
-    final_cash = total_net - total_expenses
+    if not monthly_sales.empty:
+        tr = pd.to_numeric(monthly_sales['총매출'], errors='coerce').fillna(0).sum()
+        tn = pd.to_numeric(monthly_sales['순익'], errors='coerce').fillna(0).sum()
+    else:
+        tr = 0
+        tn = 0
+        
+    final_cash = tn - total_expenses
     
     st.divider()
     st.write("### 🏁 최종 경영 결산 대시보드")
     m1, m2, m3, m4, m5 = st.columns(5)
     
     m1.metric("🎯 목표 (매출기준)", f"{fmt(st.session_state.targets['rev'])}원")
-    m2.metric("💰 매출", f"{fmt(total_rev)}원")
-    m3.metric("📈 순수익(대표공임 제외)", f"{fmt(total_net)}원")
+    m2.metric("💰 매출", f"{fmt(tr)}원")
+    m3.metric("📈 순수익(대표공임 제외)", f"{fmt(tn)}원")
     m4.metric("💸 외부비용", f"{fmt(total_expenses)}원")
     m5.metric("✨ 최종 찐수익", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
@@ -429,12 +492,24 @@ if current_user == MASTER_ID:
             st.warning("현재 회원 명부를 불러오고 있습니다. 잠시 후 확인해 주세요.")
 
         st.divider()
-        st.write("### 🗄️ 플랫폼 데이터 전수 조사 (전체 회원 상품 DB)")
-        if not df_master.empty:
-            disp_master = df_master.copy()
-            for col in ["원가", "권장가", "공임비"]:
-                if col in disp_master.columns: 
-                    disp_master[col] = disp_master[col].apply(fmt)
-            st.dataframe(disp_master, use_container_width=True)
-        else:
-            st.write("등록된 전체 데이터가 없습니다.")
+        st.write("### 🗄️ 플랫폼 데이터 전수 조사 (전체 회원 상품/매출 DB)")
+        c1, c2 = st.tabs(["📦 전체 상품 장부", "🧾 전체 매출 장부"])
+        with c1:
+            if not df_master.empty:
+                disp_master = df_master.copy()
+                for col in ["원가", "권장가", "공임비"]:
+                    if col in disp_master.columns: 
+                        disp_master[col] = disp_master[col].apply(fmt)
+                st.dataframe(disp_master, use_container_width=True)
+            else:
+                st.write("등록된 상품 데이터가 없습니다.")
+                
+        with c2:
+            if not df_sales.empty:
+                disp_sales_all = df_sales.copy()
+                for col in ["판매가", "총매출", "순익"]:
+                    if col in disp_sales_all.columns: 
+                        disp_sales_all[col] = pd.to_numeric(disp_sales_all[col], errors='coerce').fillna(0).apply(fmt)
+                st.dataframe(disp_sales_all, use_container_width=True)
+            else:
+                st.write("등록된 매출 데이터가 없습니다.")
