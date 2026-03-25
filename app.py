@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components 
 import pandas as pd
 import numpy as np
 import random
@@ -12,22 +13,19 @@ import requests
 KST = timezone(timedelta(hours=9))
 
 # ==========================================
-# 👑 [0] 마스터 및 황금 열쇠(API/DB) 설정 구역
+# 👑 [0] 마스터 및 황금 열쇠(API/DB) 설정 구역 (대표님 키 완벽 이식 완료!)
 # ==========================================
 MASTER_ID = "[청다움]"
 MASTER_PW = "150328"
 
-# 1. 수파베이스(DB) 연결 키
 SUPABASE_URL = "https://imgyafnhzrketbjfpxdt.supabase.co" 
 SUPABASE_KEY = "sb_publishable_mXPEUz8UITZRpC9Q8d11og_2D1WQAYU"         
 
-# 2. 외부 데이터 사냥용 3대 API 키 (대표님 입력 필수!)
 NAVER_CLIENT_ID = "IfR2VKsvWWc2ZLDivsbO"
 NAVER_CLIENT_SECRET = "9TFmWDXh7w"
 YOUTUBE_API_KEY = "AIzaSyD5Pn7AHtK48UagHMxNssdCXGg6BWLOSk8"
 PUBLIC_DATA_KEY = "8224e0180b695871891f9b3d0299a94d5550d9cb156a6565df3f6bcc25d84a73"
 
-# [업데이트 완료] 청다움 실전 키워드 보물상자 (총 26개)
 KEYWORD_LIST = [
     "디저트", "앙금플라워", "떡케이크", "양갱", "산도", "고나시", "디저트공방", 
     "개성주악", "선물포장방법", "보자기포장", "디저트트렌드", "화과자", 
@@ -38,10 +36,43 @@ KEYWORD_LIST = [
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
 st.set_page_config(
-    page_title="청다움 마스터 V55.0", 
+    page_title="청다움", 
     page_icon="🍡", 
     layout="wide"
 )
+
+# 📱 모바일 진짜 앱 강제 위장 코드 (PWA)
+pwa_code = """
+<script>
+    const parentDoc = window.parent.document;
+    parentDoc.title = '청다움';
+    
+    let appleTitle = parentDoc.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (!appleTitle) {
+        appleTitle = parentDoc.createElement('meta');
+        appleTitle.name = "apple-mobile-web-app-title";
+        parentDoc.head.appendChild(appleTitle);
+    }
+    appleTitle.content = "청다움";
+
+    let appleCapable = parentDoc.querySelector('meta[name="apple-mobile-web-app-capable"]');
+    if (!appleCapable) {
+        appleCapable = parentDoc.createElement('meta');
+        appleCapable.name = "apple-mobile-web-app-capable";
+        parentDoc.head.appendChild(appleCapable);
+    }
+    appleCapable.content = "yes";
+
+    let appleIcon = parentDoc.querySelector('link[rel="apple-touch-icon"]');
+    if (!appleIcon) {
+        appleIcon = parentDoc.createElement('link');
+        appleIcon.rel = "apple-touch-icon";
+        parentDoc.head.appendChild(appleIcon);
+    }
+    appleIcon.href = "https://여기에_추후_로고주소를_넣으세요.png";
+</script>
+"""
+components.html(pwa_code, height=0, width=0)
 
 hide_streamlit_style = """
 <style>
@@ -52,7 +83,6 @@ header {visibility: hidden;}
 .viewerBadge_container__1QSob {display: none !important;}
 .viewerBadge_link__1S137 {display: none !important;}
 [data-testid="stForm"] {margin-bottom: 2rem;}
-/* 전광판 배너 디자인 */
 .marquee-banner {
     background-color: #f0f6ff;
     padding: 10px;
@@ -105,7 +135,6 @@ def load_all_data():
     
     return u_df, p_df, s_df, e_df, q_df, l_df, m_df
 
-# 데이터 로드 및 초기 마스터 계정 확인
 try:
     df_users, df_master, df_sales, df_expenses, df_quest, df_link, df_magazine = load_all_data()
     
@@ -121,13 +150,13 @@ except Exception as e:
     st.error("장부를 불러오는 데 실패했습니다. 서버 상태를 확인해주세요.")
     st.stop()
 
-# --- [3] 로그인 및 회원가입 로직 (마스터 승인 시스템 탑재) ---
+# --- [3] 로그인 및 회원가입 로직 (🚨 VIP 마스터 승인 시스템 철통 탑재) ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
 
 if not st.session_state.logged_in:
-    st.markdown("<h1 style='text-align: center;'>🍡 청다움 경영 관리 플랫폼</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🍡 청다움 경영 관리 플랫폼 (VIP)</h1>", unsafe_allow_html=True)
     st.divider()
     
     log_tab, sign_tab = st.tabs(["🔑 로그인", "📝 회원가입"])
@@ -148,16 +177,16 @@ if not st.session_state.logged_in:
                 else:
                     match = df_users[(df_users["아이디"] == u_id_str) & (df_users["비밀번호"] == u_pw_str)]
                     if not match.empty:
-                        # 💡 [핵심] 상태값에 따른 로그인 철통 방어 로직
+                        # 💡 철통 방어 로직: 상태가 '정상'인지 반드시 확인합니다.
                         user_status = match.iloc[0]["상태"]
                         if user_status == "정상":
                             st.session_state.logged_in = True
                             st.session_state.current_user = u_id_str
                             st.rerun()
                         elif user_status == "대기":
-                            st.warning("⏳ 마스터의 가입 승인을 기다리고 있습니다. 잠시만 기다려주세요!")
+                            st.warning("⏳ 마스터의 가입 승인을 기다리고 있습니다. 승인 후 다시 시도해 주세요!")
                         else: 
-                            st.error("🚫 이용이 정지된 계정입니다. 마스터에게 문의하세요.")
+                            st.error("🚫 이용이 정지된 계정입니다.")
                     else:
                         st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
                     
@@ -178,11 +207,11 @@ if not st.session_state.logged_in:
                 elif len(nid_str) < 2: 
                     st.warning("아이디를 2자 이상 입력해 주세요.")
                 else:
-                    # 💡 [핵심] 신규 가입자는 무조건 '대기' 상태로 밀어 넣습니다.
+                    # 💡 신규 가입자는 무조건 '대기' 상태로 감옥(?)에 갇힙니다.
                     supabase.table("user_db").insert({
                         "아이디": nid_str, 
                         "비밀번호": npw_str, 
-                        "상태": "대기" 
+                        "상태": "대기"
                     }).execute()
                     
                     supabase.table("quest_db").insert({
@@ -207,7 +236,6 @@ else:
     user_sales = df_sales[df_sales['등록자'] == current_user].copy()
     user_expenses = df_expenses[df_expenses['등록자'] == current_user].copy()
 
-# 월 리스트 설정 (KST 시간 기준)
 if not user_sales.empty:
     month_list = sorted(user_sales['월'].unique().tolist(), reverse=True)
     curr_m = datetime.now(KST).strftime('%Y-%m') 
@@ -216,11 +244,10 @@ if not user_sales.empty:
 else: 
     month_list = [datetime.now(KST).strftime('%Y-%m')]
 
-# 세션 목표 초기화
 if 'targets' not in st.session_state: 
     st.session_state.targets = {'rev': 10000000, 'net': 4000000}
 
-# --- [5] 사이드바 UI (계산기 + 달력 위젯 신설/확장) ---
+# --- [5] 사이드바 UI ---
 with st.sidebar:
     st.title(f"👋 {current_user} 사장님" if not is_master else "👑 대표님(Master)")
     
@@ -279,7 +306,7 @@ with st.sidebar:
                     st.session_state['calc_val'] += key
                 st.rerun()
 
-# --- [6] 메인 화면 & 🚨 최상단 전광판 배너 ---
+# --- [6] 메인 화면 ---
 st.title(f"🍡 청다움 경영 관리 시스템 (ID: {current_user})")
 
 latest_news = df_magazine.iloc[0]['제목'] if not df_magazine.empty else "청다움 라운지에 새로운 디저트 트렌드가 업데이트되었습니다!"
@@ -295,7 +322,6 @@ with c2:
 
 monthly_sales = user_sales[user_sales['월'] == selected_month] if not user_sales.empty else pd.DataFrame()
 
-# 💡 탭 배열 세팅
 tab_names = ["📊 상품 정보 등록", "📈 실전 매출 입력", "🏆 성과 시각화", "🏭 경영 결산", "🎓 청다움 라운지", "🚀 창업 퀘스트"]
 if is_master: 
     tab_names.append("👑 마스터 관리")
@@ -303,11 +329,11 @@ if is_master:
 tabs = st.tabs(tab_names)
 
 # ==========================================
-# 탭 1: 상품 정보 등록 (원가계산기)
+# 탭 1: 상품 정보 등록
 # ==========================================
 with tabs[0]:
     with st.expander("📍 신규 상품 영구 등록 (스마트 원가 계산기)", expanded=True):
-        with st.form("v54_reg_form"):
+        with st.form("v55_reg_form"):
             col1, col2, col3 = st.columns([2, 1, 1])
             p_name = col1.text_input("📝 상품명", placeholder="예: 앙금플라워 6구")
             target_m = col2.number_input("🎯 목표 마진", value=0.4, step=0.1)
@@ -540,7 +566,7 @@ with tabs[3]:
     m[4].metric("✨ 통장 입금액", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지 (도매처 클릭링크)
+# 탭 5: 🎓 청다움 라운지 
 # ==========================================
 with tabs[4]:
     st.markdown("### 📰 청다움 트렌드 매거진")
@@ -597,7 +623,7 @@ with tabs[4]:
                     st.error("상호명과 사이트(URL)는 필수 입력 사항입니다.")
 
 # ==========================================
-# 탭 6: 🚀 창업 퀘스트 (초상세 노하우 복원 완료)
+# 탭 6: 🚀 창업 퀘스트 
 # ==========================================
 with tabs[5]:
     st.markdown("### 💰 청다움 생존 계산기")
