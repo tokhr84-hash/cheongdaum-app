@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  # 💡 [추가] 모바일 화면 조작용 부품
 import pandas as pd
 import numpy as np
 import random
@@ -38,10 +39,49 @@ KEYWORD_LIST = [
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
 st.set_page_config(
-    page_title="청다움 마스터 V54.0", 
-    page_icon="🍡", 
+    page_title="청다움", # 💡 [수정] 모바일 및 브라우저 상단 탭 이름 고정
+    page_icon="https://여기에_복사한_이미지_주소를_붙여넣으세요.png", # 💡 [수정] 웹 브라우저 상단 로고 이미지 (로고 URL 입력)
     layout="wide"
 )
+
+# 💡 [신규 추가] --- 📱 모바일 진짜 앱 강제 위장 코드 (PWA) ---
+pwa_code = """
+<script>
+    const parentDoc = window.parent.document;
+    
+    // 1. 스마트폰 앱 이름 강제 고정
+    parentDoc.title = '청다움';
+    
+    let appleTitle = parentDoc.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (!appleTitle) {
+        appleTitle = parentDoc.createElement('meta');
+        appleTitle.name = "apple-mobile-web-app-title";
+        parentDoc.head.appendChild(appleTitle);
+    }
+    appleTitle.content = "청다움";
+
+    // 2. 인터넷 주소창 숨기기 (풀스크린 앱 모드 적용)
+    let appleCapable = parentDoc.querySelector('meta[name="apple-mobile-web-app-capable"]');
+    if (!appleCapable) {
+        appleCapable = parentDoc.createElement('meta');
+        appleCapable.name = "apple-mobile-web-app-capable";
+        parentDoc.head.appendChild(appleCapable);
+    }
+    appleCapable.content = "yes";
+
+    // 3. 스마트폰 바탕화면 앱 아이콘 강제 교체!
+    let appleIcon = parentDoc.querySelector('link[rel="apple-touch-icon"]');
+    if (!appleIcon) {
+        appleIcon = parentDoc.createElement('link');
+        appleIcon.rel = "apple-touch-icon";
+        parentDoc.head.appendChild(appleIcon);
+    }
+    // 👇 로고 이미지 주소를 쌍따옴표 안에 똑같이 넣어주세요!
+    appleIcon.href = "https://여기에_복사한_이미지_주소를_붙여넣으세요.png";
+</script>
+"""
+components.html(pwa_code, height=0, width=0)
+# -----------------------------------------------------------
 
 hide_streamlit_style = """
 <style>
