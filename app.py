@@ -40,7 +40,7 @@ KEYWORD_LIST = [
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
 st.set_page_config(
     page_title="청다움", # 💡 [수정] 모바일 및 브라우저 상단 탭 이름 고정
-    page_icon="https://여기에_복사한_이미지_주소를_붙여넣으세요.png", # 💡 [수정] 웹 브라우저 상단 로고 이미지 (로고 URL 입력)
+    page_icon="https://github.com/tokhr84-hash/cheongdaum-app/blob/main/%EB%A1%9C%EA%B3%A0%ED%81%AC%EA%B8%B0%EC%88%98%EC%A0%95.jpg?raw=true", # 💡 [수정] 웹 브라우저 상단 로고 이미지 (로고 URL 입력)
     layout="wide"
 )
 
