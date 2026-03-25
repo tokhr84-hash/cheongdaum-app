@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components  # 💡 [추가] 모바일 화면 조작용 부품
 import pandas as pd
 import numpy as np
 import random
@@ -39,49 +38,10 @@ KEYWORD_LIST = [
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
 st.set_page_config(
-    page_title="청다움", # 💡 [수정] 모바일 및 브라우저 상단 탭 이름 고정
-    page_icon="https://github.com/tokhr84-hash/cheongdaum-app/blob/main/%EB%A1%9C%EA%B3%A0%ED%81%AC%EA%B8%B0%EC%88%98%EC%A0%95.jpg?raw=true", # 💡 [수정] 웹 브라우저 상단 로고 이미지 (로고 URL 입력)
+    page_title="청다움 마스터 V55.0", 
+    page_icon="🍡", 
     layout="wide"
 )
-
-# 💡 [신규 추가] --- 📱 모바일 진짜 앱 강제 위장 코드 (PWA) ---
-pwa_code = """
-<script>
-    const parentDoc = window.parent.document;
-    
-    // 1. 스마트폰 앱 이름 강제 고정
-    parentDoc.title = '청다움';
-    
-    let appleTitle = parentDoc.querySelector('meta[name="apple-mobile-web-app-title"]');
-    if (!appleTitle) {
-        appleTitle = parentDoc.createElement('meta');
-        appleTitle.name = "apple-mobile-web-app-title";
-        parentDoc.head.appendChild(appleTitle);
-    }
-    appleTitle.content = "청다움";
-
-    // 2. 인터넷 주소창 숨기기 (풀스크린 앱 모드 적용)
-    let appleCapable = parentDoc.querySelector('meta[name="apple-mobile-web-app-capable"]');
-    if (!appleCapable) {
-        appleCapable = parentDoc.createElement('meta');
-        appleCapable.name = "apple-mobile-web-app-capable";
-        parentDoc.head.appendChild(appleCapable);
-    }
-    appleCapable.content = "yes";
-
-    // 3. 스마트폰 바탕화면 앱 아이콘 강제 교체!
-    let appleIcon = parentDoc.querySelector('link[rel="apple-touch-icon"]');
-    if (!appleIcon) {
-        appleIcon = parentDoc.createElement('link');
-        appleIcon.rel = "apple-touch-icon";
-        parentDoc.head.appendChild(appleIcon);
-    }
-    // 👇 로고 이미지 주소를 쌍따옴표 안에 똑같이 넣어주세요!
-    appleIcon.href = "https://여기에_복사한_이미지_주소를_붙여넣으세요.png";
-</script>
-"""
-components.html(pwa_code, height=0, width=0)
-# -----------------------------------------------------------
 
 hide_streamlit_style = """
 <style>
@@ -161,7 +121,7 @@ except Exception as e:
     st.error("장부를 불러오는 데 실패했습니다. 서버 상태를 확인해주세요.")
     st.stop()
 
-# --- [3] 로그인 및 회원가입 로직 ---
+# --- [3] 로그인 및 회원가입 로직 (마스터 승인 시스템 탑재) ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
@@ -187,12 +147,19 @@ if not st.session_state.logged_in:
                     st.rerun()
                 else:
                     match = df_users[(df_users["아이디"] == u_id_str) & (df_users["비밀번호"] == u_pw_str)]
-                    if not match.empty and match.iloc[0]["상태"] == "정상":
-                        st.session_state.logged_in = True
-                        st.session_state.current_user = u_id_str
-                        st.rerun()
-                    else: 
-                        st.error("로그인 실패 또는 정지된 계정입니다.")
+                    if not match.empty:
+                        # 💡 [핵심] 상태값에 따른 로그인 철통 방어 로직
+                        user_status = match.iloc[0]["상태"]
+                        if user_status == "정상":
+                            st.session_state.logged_in = True
+                            st.session_state.current_user = u_id_str
+                            st.rerun()
+                        elif user_status == "대기":
+                            st.warning("⏳ 마스터의 가입 승인을 기다리고 있습니다. 잠시만 기다려주세요!")
+                        else: 
+                            st.error("🚫 이용이 정지된 계정입니다. 마스터에게 문의하세요.")
+                    else:
+                        st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
                     
     with sign_tab:
         with st.form("signup_form"):
@@ -200,7 +167,7 @@ if not st.session_state.logged_in:
             new_pw = st.text_input("새로운 비밀번호(PW)", type="password")
             new_pw_check = st.text_input("비밀번호 확인", type="password")
             
-            if st.form_submit_button("가입하기", use_container_width=True):
+            if st.form_submit_button("가입 신청하기", use_container_width=True):
                 nid_str = str(new_id).strip()
                 npw_str = str(new_pw).strip()
                 
@@ -211,10 +178,11 @@ if not st.session_state.logged_in:
                 elif len(nid_str) < 2: 
                     st.warning("아이디를 2자 이상 입력해 주세요.")
                 else:
+                    # 💡 [핵심] 신규 가입자는 무조건 '대기' 상태로 밀어 넣습니다.
                     supabase.table("user_db").insert({
                         "아이디": nid_str, 
                         "비밀번호": npw_str, 
-                        "상태": "정상"
+                        "상태": "대기" 
                     }).execute()
                     
                     supabase.table("quest_db").insert({
@@ -222,7 +190,7 @@ if not st.session_state.logged_in:
                     }).execute()
                     
                     st.cache_data.clear()
-                    st.success(f"가입 완료! '{nid_str}'로 로그인해 주세요.")
+                    st.success(f"🎉 가입 신청 완료! 마스터의 승인 후 '{nid_str}' 계정으로 로그인 가능합니다.")
     st.stop()
 
 # --- [4] 개인별 데이터 연동 및 필터링 ---
@@ -268,7 +236,6 @@ with st.sidebar:
     
     st.divider()
     
-    # 💡 [신규/확장 기능] 스케줄 달력 위젯 세로 길이 대폭 확장
     st.subheader("📅 스케줄 및 발주 관리")
     selected_date = st.date_input("날짜를 선택하세요", datetime.now(KST).date())
     
@@ -278,13 +245,12 @@ with st.sidebar:
     st.session_state.memo = st.text_area(
         "오늘의 메모 / 할 일 (자유롭게 적으세요)", 
         value=st.session_state.memo, 
-        height=300, # 💡 세로 길이를 300으로 대폭 넓혀 쾌적한 메모장 환경 제공
+        height=300, 
         placeholder="예시:\n- 백앙금 10kg 발주하기\n- 오후 2시 답례품 50구 픽업\n- 보자기 포장재 재고 확인"
     )
     
     st.divider()
     
-    # 🧮 계산기 로직 (풀어서 작성)
     st.title("🧮 빠른 계산기")
     if 'calc_val' not in st.session_state: 
         st.session_state['calc_val'] = ""
@@ -667,7 +633,6 @@ with tabs[5]:
         st.write(f"**현재 창업 준비 {int(progress_pct * 100)}% 완료!**")
         
         with st.form("quest_form"):
-            # 💡 [핵심 복구] 예전의 상세했던 노하우 멘트 100% 원상복구 및 확장
             s1 = st.checkbox("1단계: 보건증(건강진단결과서) 발급", value=bool(uq.get('step1', False)))
             st.caption("💡 노하우: 신분증을 챙겨 보건소에 방문하세요! 검사 후 발급까지 주말 제외 약 5일이 소요되니 매장 계약 직후 1순위로 움직이셔야 합니다.")
             
@@ -753,7 +718,7 @@ with tabs[5]:
                     st.error(f"정부 서버와의 연결이 완전히 끊어졌습니다. (에러: {e})")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 
+# 탭 7: 👑 마스터 관리 (신규 가입자 승인 추가)
 # ==========================================
 if is_master:
     with tabs[6]:
@@ -849,17 +814,24 @@ if is_master:
 
         st.divider()
         
-        st.write("### 👥 회원 명부 관리")
+        # 💡 [핵심] 마스터 가입 승인 관리 패널
+        st.write("### 👥 회원 명부 관리 (가입 승인)")
+        
+        pending_users = df_users[df_users['상태'] == '대기']
+        if not pending_users.empty:
+            st.warning(f"🚨 승인 대기 중인 신규 가입자가 {len(pending_users)}명 있습니다! 권한을 부여해 주세요.")
+            
         st.dataframe(df_users, hide_index=True, use_container_width=True)
         
         with st.form("u_man"):
-            tid = st.text_input("아이디")
-            act = st.selectbox("작업", ["정상", "정지", "삭제"])
+            tid = st.text_input("상태를 변경할 아이디를 입력하세요")
+            act = st.selectbox("작업 선택", ["정상 (승인/복구)", "대기 (보류)", "정지 (차단)", "삭제 (영구제거)"])
             
             if st.form_submit_button("실행"):
-                if act == "삭제": 
+                if "삭제" in act: 
                     supabase.table("user_db").delete().eq("아이디", tid).execute()
                 else: 
-                    supabase.table("user_db").update({"상태": act}).eq("아이디", tid).execute()
+                    new_status = act.split(" ")[0] # '정상', '대기', '정지' 글자만 추출
+                    supabase.table("user_db").update({"상태": new_status}).eq("아이디", tid).execute()
                 st.cache_data.clear()
                 st.rerun()
