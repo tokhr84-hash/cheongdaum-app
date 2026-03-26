@@ -33,7 +33,7 @@ KEYWORD_LIST = [
     "화과자 공방 창업", "상견례 답례품 추천", "디저트 팝업스토어", 
     "백화점 디저트 입점", "전통 디저트 현대화", "디저트 단가 계산", 
     "디저트 공방 마케팅", "명절 선물 세트 구성", "개성주악 트렌드","앙금플라워",
-    "앙금플라워쿠키","검색어 상위 디저트","디저트 순위"
+    "앙금플라워쿠키","디저트 순위","급등 디저트"
 ]
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
@@ -566,18 +566,24 @@ with tabs[3]:
     m[4].metric("✨ 통장 입금액", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지 (💡 V56.0 VIP 트렌드 핫라인 장착)
+# 탭 5: 🎓 청다움 라운지 
 # ==========================================
 with tabs[4]:
-    # 💡 [V56.0 신규 장착] 글로벌 트렌드 직통 핫라인 
     st.markdown("### 👑 VIP 글로벌 트렌드 데이터베이스")
     st.caption("대한민국 상위 1% 디저트 CEO를 위한 국내외 1티어 B2B 정보망입니다. 버튼을 누르면 즉시 연결됩니다.")
     
+    st.write("##### 🌍 글로벌 & 산업 통계망")
     col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-    col_btn1.link_button("📊 FIS 식품산업통계", "https://www.atfis.or.kr/", use_container_width=True)
-    col_btn2.link_button("🌍 KATI 농식품수출정보", "https://www.kati.net/", use_container_width=True)
-    col_btn3.link_button("🇺🇸 Pastry Arts Magazine", "https://pastryartsmag.com/", use_container_width=True)
-    col_btn4.link_button("💡 Mintel 글로벌 트렌드", "https://www.mintel.com/", use_container_width=True)
+    col_btn1.link_button("🇺🇸 Pastry Arts Magazine", "https://pastryartsmag.com/", use_container_width=True)
+    col_btn2.link_button("💡 Mintel 글로벌 트렌드", "https://www.mintel.com/", use_container_width=True)
+    col_btn3.link_button("📊 FIS 식품산업통계", "https://www.atfis.or.kr/", use_container_width=True)
+    col_btn4.link_button("🌍 KATI 농식품수출정보", "https://www.kati.net/", use_container_width=True)
+    
+    st.write("##### 🇯🇵 일본 화과자 & 디저트 정밀 타격망")
+    col_j1, col_j2, col_j3 = st.columns(3)
+    col_j1.link_button("🍡 일본 전국화과자협회", "https://www.wagashi.or.jp/", use_container_width=True)
+    col_j2.link_button("📖 월간 제과제빵 (B2B)", "https://www.seikaseipan.com/", use_container_width=True)
+    col_j3.link_button("⚡ PR TIMES (일본 실시간 신상)", "https://prtimes.jp/category/sweets", use_container_width=True)
     
     st.divider()
 
@@ -756,7 +762,7 @@ with tabs[5]:
                     st.error(f"정부 서버와의 연결이 완전히 끊어졌습니다. (에러: {e})")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 (💡 V56.0 B2B 정밀 타격 로봇 탑재)
+# 탭 7: 👑 마스터 관리 
 # ==========================================
 if is_master:
     with tabs[6]:
@@ -773,38 +779,38 @@ if is_master:
                     today_str = datetime.now(KST).strftime("%Y-%m-%d")
                     k1, k2, k3 = random.sample(KEYWORD_LIST, 3)
                     
-                    # 💡 [V56.0 핵심 수술] 뉴스 1: B2B 매체 + 트렌드 강제 고정
                     try:
-                        smart_query1 = f"{k1} (식품외식경제 OR 파티시에 OR 베이커리 OR 배민트렌드 OR aT) 트렌드 OR 창업"
+                        smart_query1 = f"{k1} 식품외식경제|파티시에|베이커리|배민트렌드|트렌드|비즈니스"
                         n_res1 = requests.get(
                             "https://openapi.naver.com/v1/search/news.json", 
                             headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, 
                             params={"query": smart_query1, "display": 3}
                         ).json()
-                        news_txt1 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res1.get('items', [])])
+                        items1 = n_res1.get('items', [])
+                        news_txt1 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in items1]) if items1 else "- 🔍 관련된 최신 B2B 기사가 없습니다. 내일 다시 시도해 주세요."
                     except: 
                         news_txt1 = "- 수집 실패"
 
-                    # 💡 [V56.0 핵심 수술] 뉴스 2: B2B 매체 + 시장/매출 강제 고정
                     try:
-                        smart_query2 = f"{k2} (식품외식경제 OR 파티시에 OR 베이커리) 시장 OR 매출 OR 포장"
+                        smart_query2 = f"{k2} 식품외식경제|파티시에|베이커리|시장|매출|노하우"
                         n_res2 = requests.get(
                             "https://openapi.naver.com/v1/search/news.json", 
                             headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, 
                             params={"query": smart_query2, "display": 3}
                         ).json()
-                        news_txt2 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res2.get('items', [])])
+                        items2 = n_res2.get('items', [])
+                        news_txt2 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in items2]) if items2 else "- 🔍 관련된 최신 B2B 기사가 없습니다. 내일 다시 시도해 주세요."
                     except: 
                         news_txt2 = "- 수집 실패"
 
-                    # 💡 [V56.0 핵심 수술] 유튜브: 먹방, ASMR, 브이로그 철저히 배제
                     try:
-                        smart_yt_query = f"{k3} 만들기 OR 포장법 OR 창업 노하우 -먹방 -ASMR -mukbang -vlog -브이로그"
+                        smart_yt_query = f"{k3} 노하우|창업|만들기|포장 -먹방 -ASMR -vlog -브이로그"
                         y_res = requests.get(
                             "https://www.googleapis.com/youtube/v3/search", 
                             params={"part": "snippet", "q": smart_yt_query, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}
                         ).json()
-                        yt_txt = "\n".join([f"- 📺 [{i['snippet']['title'].replace('&quot;','').replace('&#39;','') }](https://www.youtube.com/watch?v={i['id']['videoId']})" for i in y_res.get('items', [])])
+                        items_yt = y_res.get('items', [])
+                        yt_txt = "\n".join([f"- 📺 [{i['snippet']['title'].replace('&quot;','').replace('&#39;','') }](https://www.youtube.com/watch?v={i['id']['videoId']})" for i in items_yt]) if items_yt else "- 🔍 해당되는 전문 영상이 없습니다."
                     except: 
                         yt_txt = "- 수집 실패"
                     
@@ -834,6 +840,27 @@ if is_master:
                     st.cache_data.clear()
                     st.success("🎉 작전 성공! 전광판을 확인하세요.")
                     st.rerun()
+
+        st.divider()
+        
+        # 💡 [V56.3 신규 탑재] 발행된 매거진 삭제 (QA 권한)
+        st.write("### 🗑️ 발행된 매거진 영구 삭제")
+        st.caption("마음에 들지 않거나 오류가 난 과거 매거진을 삭제할 수 있습니다.")
+        
+        if not df_magazine.empty:
+            with st.form("delete_mag_form"):
+                # 매거진 목록을 딕셔너리로 만듭니다 (표시용 이름: 실제 ID)
+                mag_options = {f"[{r['작성일']}] {r['제목']}": r['id'] for i, r in df_magazine.iterrows()}
+                mag_to_del = st.selectbox("삭제할 매거진을 선택하세요", list(mag_options.keys()))
+                
+                if st.form_submit_button("❌ 선택 매거진 영구 삭제", use_container_width=True):
+                    target_mag_id = mag_options[mag_to_del]
+                    supabase.table("magazine_db").delete().eq("id", target_mag_id).execute()
+                    st.cache_data.clear()
+                    st.success("🗑️ 선택하신 매거진이 영구 삭제되었습니다!")
+                    st.rerun()
+        else:
+            st.info("현재 삭제할 매거진이 없습니다.")
 
         st.divider()
         
