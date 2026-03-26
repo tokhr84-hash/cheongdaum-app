@@ -13,7 +13,7 @@ import requests
 KST = timezone(timedelta(hours=9))
 
 # ==========================================
-# 👑 [0] 마스터 및 황금 열쇠(API/DB) 설정 구역 (대표님 키 완벽 이식 완료!)
+# 👑 [0] 마스터 및 황금 열쇠(API/DB) 설정 구역 
 # ==========================================
 MASTER_ID = "[청다움]"
 MASTER_PW = "150328"
@@ -26,12 +26,14 @@ NAVER_CLIENT_SECRET = "9TFmWDXh7w"
 YOUTUBE_API_KEY = "AIzaSyD5Pn7AHtK48UagHMxNssdCXGg6BWLOSk8"
 PUBLIC_DATA_KEY = "8224e0180b695871891f9b3d0299a94d5550d9cb156a6565df3f6bcc25d84a73"
 
+# 💡 [V56.0 업데이트] 2026 실전 B2B 디저트 공방 핵심 키워드 
 KEYWORD_LIST = [
-    "디저트", "앙금플라워", "떡케이크", "양갱", "산도", "고나시", "디저트공방", 
-    "개성주악", "선물포장방법", "보자기포장", "디저트트렌드", "화과자", 
-    "디저트공방창업", "상견례선물", "결혼식답례", "어버이날선물", "다과", 
-    "전통다과", "수제디저트", "전통디저트", "일본디저트", "대만디저트", 
-    "홍콩디저트", "해외디저트", "유행디저트", "디저트청다움"
+    "버터떡 레시피", "두쫀쿠 유행", "속 채운 모찌", "글루텐프리 디저트", 
+    "보자기 포장법", "답례품 패키징", "트루하트 선물포장", "아름드리 선물포장",
+    "화과자 공방 창업", "상견례 답례품 추천", "디저트 팝업스토어", 
+    "백화점 디저트 입점", "전통 디저트 현대화", "디저트 단가 계산", 
+    "디저트 공방 마케팅", "명절 선물 세트 구성", "개성주악 트렌드","앙금플라워",
+    "앙금플라워쿠키","검색어 상위 디저트","디저트 순위"
 ]
 
 # --- [1] 시스템 설정 및 화이트 라벨링 ---
@@ -150,7 +152,7 @@ except Exception as e:
     st.error("장부를 불러오는 데 실패했습니다. 서버 상태를 확인해주세요.")
     st.stop()
 
-# --- [3] 로그인 및 회원가입 로직 (🚨 VIP 마스터 승인 시스템 철통 탑재) ---
+# --- [3] 로그인 및 회원가입 로직 (VIP 마스터 승인 시스템 유지) ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
@@ -177,7 +179,6 @@ if not st.session_state.logged_in:
                 else:
                     match = df_users[(df_users["아이디"] == u_id_str) & (df_users["비밀번호"] == u_pw_str)]
                     if not match.empty:
-                        # 💡 철통 방어 로직: 상태가 '정상'인지 반드시 확인합니다.
                         user_status = match.iloc[0]["상태"]
                         if user_status == "정상":
                             st.session_state.logged_in = True
@@ -207,7 +208,6 @@ if not st.session_state.logged_in:
                 elif len(nid_str) < 2: 
                     st.warning("아이디를 2자 이상 입력해 주세요.")
                 else:
-                    # 💡 신규 가입자는 무조건 '대기' 상태로 감옥(?)에 갇힙니다.
                     supabase.table("user_db").insert({
                         "아이디": nid_str, 
                         "비밀번호": npw_str, 
@@ -566,11 +566,23 @@ with tabs[3]:
     m[4].metric("✨ 통장 입금액", f"{fmt(final_cash)}원", delta=f"{fmt(final_cash)}" if final_cash > 0 else None)
 
 # ==========================================
-# 탭 5: 🎓 청다움 라운지 
+# 탭 5: 🎓 청다움 라운지 (💡 V56.0 VIP 트렌드 핫라인 장착)
 # ==========================================
 with tabs[4]:
-    st.markdown("### 📰 청다움 트렌드 매거진")
-    st.caption("청다움 마스터가 매일 엄선하는 디저트 인사이트입니다.")
+    # 💡 [V56.0 신규 장착] 글로벌 트렌드 직통 핫라인 
+    st.markdown("### 👑 VIP 글로벌 트렌드 데이터베이스")
+    st.caption("대한민국 상위 1% 디저트 CEO를 위한 국내외 1티어 B2B 정보망입니다. 버튼을 누르면 즉시 연결됩니다.")
+    
+    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+    col_btn1.link_button("📊 FIS 식품산업통계", "https://www.atfis.or.kr/", use_container_width=True)
+    col_btn2.link_button("🌍 KATI 농식품수출정보", "https://www.kati.net/", use_container_width=True)
+    col_btn3.link_button("🇺🇸 Pastry Arts Magazine", "https://pastryartsmag.com/", use_container_width=True)
+    col_btn4.link_button("💡 Mintel 글로벌 트렌드", "https://www.mintel.com/", use_container_width=True)
+    
+    st.divider()
+
+    st.markdown("### 📰 청다움 트렌드 매거진 (AI 자동 수집)")
+    st.caption("마스터 로봇이 B2B 전문지(식품외식경제, 파티시에 등)에서만 엄선하여 매일 긁어오는 핵심 브리핑입니다.")
     
     if not df_magazine.empty:
         for idx, row in df_magazine.iterrows():
@@ -626,7 +638,7 @@ with tabs[4]:
 # 탭 6: 🚀 창업 퀘스트 
 # ==========================================
 with tabs[5]:
-    st.markdown("### 💰 청다움 생존 계산기")
+    st.markdown("### 💰 청다움 창업 계산기")
     with st.container(border=True):
         budget = st.number_input("💵 1. 초기 예산", value=0, step=1000000)
         col_c1, col_c2, col_c3, col_c4 = st.columns(4)
@@ -744,45 +756,53 @@ with tabs[5]:
                     st.error(f"정부 서버와의 연결이 완전히 끊어졌습니다. (에러: {e})")
 
 # ==========================================
-# 탭 7: 👑 마스터 관리 (신규 가입자 승인 추가)
+# 탭 7: 👑 마스터 관리 (💡 V56.0 B2B 정밀 타격 로봇 탑재)
 # ==========================================
 if is_master:
     with tabs[6]:
         st.subheader("👑 최고 관리자 대시보드 및 API 통제실")
         
-        st.write("### 🤖 청다움 전용 매거진 3단 자동 발행 로봇")
-        if st.button("🚀 오늘의 트렌드(3개 주제) 사냥 및 발행", use_container_width=True):
+        st.write("### 🤖 청다움 전용 매거진 3단 자동 발행 로봇 (B2B 모드)")
+        st.caption("국내 최고 권위의 B2B 매거진과 논-먹방 유튜브 채널만 저격합니다.")
+        
+        if st.button("🚀 최상위 트렌드(3개 주제) 사냥 및 발행", use_container_width=True):
             if NAVER_CLIENT_ID == "여기에_네이버_Client_ID를_넣으세요":
                 st.error("API 키를 입력해주세요!")
             else:
-                with st.spinner("로봇이 뉴스 2개, 유튜브 1개 주제를 사냥 중입니다..."):
+                with st.spinner("로봇이 전문 매체 기사 2개, 비즈니스 유튜브 1개 주제를 사냥 중입니다..."):
                     today_str = datetime.now(KST).strftime("%Y-%m-%d")
                     k1, k2, k3 = random.sample(KEYWORD_LIST, 3)
                     
+                    # 💡 [V56.0 핵심 수술] 뉴스 1: B2B 매체 + 트렌드 강제 고정
                     try:
+                        smart_query1 = f"{k1} (식품외식경제 OR 파티시에 OR 베이커리 OR 배민트렌드 OR aT) 트렌드 OR 창업"
                         n_res1 = requests.get(
                             "https://openapi.naver.com/v1/search/news.json", 
                             headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, 
-                            params={"query": k1, "display": 3}
+                            params={"query": smart_query1, "display": 3}
                         ).json()
                         news_txt1 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res1.get('items', [])])
                     except: 
                         news_txt1 = "- 수집 실패"
 
+                    # 💡 [V56.0 핵심 수술] 뉴스 2: B2B 매체 + 시장/매출 강제 고정
                     try:
+                        smart_query2 = f"{k2} (식품외식경제 OR 파티시에 OR 베이커리) 시장 OR 매출 OR 포장"
                         n_res2 = requests.get(
                             "https://openapi.naver.com/v1/search/news.json", 
                             headers={"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}, 
-                            params={"query": k2, "display": 3}
+                            params={"query": smart_query2, "display": 3}
                         ).json()
                         news_txt2 = "\n".join([f"- [{i['title'].replace('<b>','').replace('</b>','').replace('&quot;','')}]( {i['link']} )" for i in n_res2.get('items', [])])
                     except: 
                         news_txt2 = "- 수집 실패"
 
+                    # 💡 [V56.0 핵심 수술] 유튜브: 먹방, ASMR, 브이로그 철저히 배제
                     try:
+                        smart_yt_query = f"{k3} 만들기 OR 포장법 OR 창업 노하우 -먹방 -ASMR -mukbang -vlog -브이로그"
                         y_res = requests.get(
                             "https://www.googleapis.com/youtube/v3/search", 
-                            params={"part": "snippet", "q": k3, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}
+                            params={"part": "snippet", "q": smart_yt_query, "type": "video", "maxResults": 3, "key": YOUTUBE_API_KEY}
                         ).json()
                         yt_txt = "\n".join([f"- 📺 [{i['snippet']['title'].replace('&quot;','').replace('&#39;','') }](https://www.youtube.com/watch?v={i['id']['videoId']})" for i in y_res.get('items', [])])
                     except: 
@@ -790,16 +810,16 @@ if is_master:
                     
                     m_title = f"🌸 {today_str} 청다움 인사이트: [{k1}], [{k2}], [{k3}]"
                     m_content = f"""
-안녕하세요, 사장님! **[청다움 라운지]**입니다. 🍡
-오늘의 디저트 트렌드 3가지를 전해드립니다.
+안녕하세요, 사장님! **[청다움 B2B 라운지]**입니다. 🍡
+상위 1% 전문 매체에서 추출한 오늘의 핵심 트렌드 3가지를 전해드립니다.
 
-### 📰 뉴스 1: {k1} 트렌드
+### 📰 비즈니스 트렌드: {k1}
 {news_txt1}
 
-### 📰 뉴스 2: {k2} 트렌드
+### 📰 시장 및 노하우: {k2}
 {news_txt2}
 
-### 🎥 추천 영상: {k3}
+### 🎥 전문 노하우 영상: {k3}
 {yt_txt}
 
 ---
@@ -840,7 +860,6 @@ if is_master:
 
         st.divider()
         
-        # 💡 [핵심] 마스터 가입 승인 관리 패널
         st.write("### 👥 회원 명부 관리 (가입 승인)")
         
         pending_users = df_users[df_users['상태'] == '대기']
@@ -857,7 +876,7 @@ if is_master:
                 if "삭제" in act: 
                     supabase.table("user_db").delete().eq("아이디", tid).execute()
                 else: 
-                    new_status = act.split(" ")[0] # '정상', '대기', '정지' 글자만 추출
+                    new_status = act.split(" ")[0] 
                     supabase.table("user_db").update({"상태": new_status}).eq("아이디", tid).execute()
                 st.cache_data.clear()
                 st.rerun()
